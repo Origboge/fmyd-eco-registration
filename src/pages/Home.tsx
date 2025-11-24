@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowRight, Recycle, Wind, Zap, Hammer, Sprout, Globe, Trash2, Factory, BarChart3, Users, Map, ChevronRight, ChevronLeft } from 'lucide-react';
+// ✅ CORRECTION 1: Added Loader2 to imports
+import { ArrowRight, Recycle, Wind, Zap, Hammer, Sprout, Globe, Trash2, Factory, BarChart3, Users, Map, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
 import { STATE_LGAS, getHeroBg, getAboutBg, getSlideImage, getLeaderImage, getPartnerImage, getTeamActivityImage,getPartnerUrl } from '../constants';
 import { db } from '../services/firebase';
 // 🚀 FIXED: Added modular Firestore imports
@@ -71,12 +72,12 @@ const Home: React.FC = () => {
     const aboutSlides = [
         {
             image: getSlideImage(1),
-            title: "Commitment to Sustainable Development Goals (SDGs)",
+            // title: "Commitment to Sustainable Development Goals (SDGs)",
             alt: "SDG Goals"
         },
         {
             image: getSlideImage(2),
-            title: "Our Purpose & Objectives",
+            // title: "Our Purpose & Objectives",
             alt: "Purpose and Objectives"
         }
     ];
@@ -157,6 +158,19 @@ else {
 
         fetchStats();
     }, []);
+
+    // ✅ CORRECTION 2: Helper function to display stat value or loading indicator
+    const renderStatValue = (value: number | undefined) => {
+        if (loadingStats) {
+            return (
+                <div className="flex items-center justify-center text-brand-light">
+                    <Loader2 className="w-8 h-8 animate-spin" />
+                </div>
+            );
+        }
+        return value !== undefined ? value.toLocaleString() : '0';
+    };
+
 
     // Auto-scroll Effect for Gallery
     useEffect(() => {
@@ -246,7 +260,7 @@ else {
                     <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-fade-in-up" style={{ animationDelay: '1.2s' }}>
                         <Link 
                             to="/register" 
-                            className="w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-gradient-to-r from-brand-primary to-green-600 text-white border-0 hover:from-white hover:to-gray-100 hover:text-brand-primary px-8 py-4 rounded-full text-lg font-bold shadow-lg hover:shadow-green-400/50 transition-all duration-300 transform hover:-translate-y-1"
+                            className="mb-6 w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-gradient-to-r from-brand-primary to-green-600 text-white border-0 hover:from-white hover:to-gray-100 hover:text-brand-primary px-8 py-4 rounded-full text-lg font-bold shadow-lg hover:shadow-green-400/50 transition-all duration-300 transform hover:-translate-y-1"
                         >
                             Register Now
                             <ArrowRight size={20} />
@@ -312,13 +326,13 @@ else {
                                             <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-brand-dark/90 to-transparent"></div>
                                             
                                             {/* Text Content - Positioned at bottom to not cover image center */}
-                                            <div className="absolute bottom-0 left-0 right-0 p-6">
+                                            {/* <div className="absolute bottom-0 left-0 right-0 p-6">
                                                 <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-xl">
                                                     <p className="font-bold text-white text-lg md:text-xl border-l-4 border-brand-primary pl-4">
                                                         {slide.title}
                                                     </p>
                                                 </div>
-                                            </div>
+                                            </div> */}
                                         </div>
                                     ))}
                                 </div>
@@ -362,8 +376,9 @@ else {
                                             </div>
                                             <h3 className="text-lg font-medium text-green-100">Total Registered</h3>
                                         </div>
+                                        {/* ✅ CORRECTION 3: Use the helper function for loading state */}
                                         <p className="text-5xl font-extrabold text-white tracking-tight">
-                                            {loadingStats ? "..." : totalRegistrations.toLocaleString()}
+                                            {renderStatValue(totalRegistrations)}
                                         </p>
                                     </div>
 
@@ -374,8 +389,9 @@ else {
                                             </div>
                                             <h3 className="text-lg font-medium text-green-100">Active States including FCT</h3>
                                         </div>
+                                        {/* ✅ CORRECTION 3: Use the helper function for loading state */}
                                         <p className="text-4xl font-bold text-white">
-                                            {loadingStats ? "..." : stats.length}
+                                            {renderStatValue(stats.length)}
                                         </p>
                                     </div>
                                 </div>
@@ -390,6 +406,7 @@ else {
                                     
                                     {loadingStats ? (
                                         <div className="h-64 flex items-center justify-center text-brand-light animate-pulse">
+                                            <Loader2 className="w-8 h-8 animate-spin mr-2" />
                                             Loading live data...
                                         </div>
                                     ) : stats.length === 0 ? (
