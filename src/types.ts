@@ -8,6 +8,7 @@ export interface RegistrationFormData {
   phone: string;
   dob: string;
   sex: string;
+  stateOfOrigin:string;
   state: string;
   lga: string;
   address: string;

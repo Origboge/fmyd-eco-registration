@@ -27,7 +27,7 @@ export const auth = getAuth(app);
 // the debug token for local development (since you registered it).
 if (typeof window !== 'undefined') {
     try {
-        // 🚨 ADD THIS LINE TEMPORARILY TO PRINT THE TOKEN 🚨
+        // // 🚨 ADD THIS LINE TEMPORARILY TO PRINT THE TOKEN 🚨
         // (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
         initializeAppCheck(app, {
             provider: new ReCaptchaV3Provider('6LdnMKYrAAAAABFmUxHLpIv9VagA73xNakZmWp_i'), 

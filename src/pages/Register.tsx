@@ -22,7 +22,12 @@ import { CheckCircle2, Upload, X, XCircle, Image as ImageIcon } from 'lucide-rea
 const Register: React.FC = () => {
     const [formData, setFormData] = useState<RegistrationFormData>({
         firstName: '', middleName: '', lastName: '', email: '', phone: '',
-        dob: '', sex: '', state: '', lga: '', address: '', landmark: '', trainingArea: '',
+        dob: '', sex: '', 
+        // 🚀 NEW: State of Origin added here
+        stateOfOrigin: '', 
+        // Existing State of Residence and LGA fields follow
+        state: '', lga: '', 
+        address: '', landmark: '', trainingArea: '',
     });
     const [age, setAge] = useState<number | null>(null);
     const [lgas, setLgas] = useState<string[]>([]);
@@ -200,6 +205,8 @@ const Register: React.FC = () => {
             // 🛑 NEW SYNTAX: addDoc(collection(db, 'collectionName'), data)
             await addDoc(collection(db, 'registrations'), {
                 ...formData,
+                // ✅ CRITICAL FIX: Explicitly including the field ensures it reaches BigQuery
+                stateOfOrigin: formData.stateOfOrigin, 
                 passportURL: passportUrl,
                 ninURL: ninUrl,
                 age: age,
@@ -211,9 +218,10 @@ const Register: React.FC = () => {
             });
 
             setStatus('success');
+            // ✅ Cleaned up the reset call for consistency
             setFormData({
                 firstName: '', middleName: '', lastName: '', email: '', phone: '',
-                dob: '', sex: '', state: '', lga: '', address: '', landmark: '', trainingArea: ''
+                dob: '', sex: '', stateOfOrigin: '', state: '', lga: '', address: '', landmark: '', trainingArea: ''
             });
             setPreviews({});
 
@@ -223,70 +231,80 @@ const Register: React.FC = () => {
         }
     };
 
-    // --- RENDER: SUCCESS OVERLAY ---
-    if (status === 'success') {
-        return (
-            <div className="min-h-[80vh] flex flex-col items-center justify-center bg-gradient-to-b from-white to-brand-light/30 p-4 pt-24">
-                <div className="bg-white p-10 rounded-[2rem] shadow-2xl text-center max-w-md w-full animate-fade-in-up border border-brand-light relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-2 bg-brand-primary"></div>
+   // --- RENDER: SUCCESS OVERLAY ---
+if (status === 'success') {
+    return (
+        // 🚀 CRITICAL FIX: Changed to fixed inset-0 z-[100] for full-screen coverage
+        // Added overflow-y-auto for safety and removed pt-24 which is not needed in fixed view
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-gradient-to-b from-white to-brand-light/30 p-4 overflow-y-auto">
+            <div className="bg-white p-10 rounded-[2rem] shadow-2xl text-center max-w-md w-full animate-fade-in-up border border-brand-light relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-2 bg-brand-primary"></div>
+                
+                <div className="w-24 h-24 bg-brand-light rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
+                    <CheckCircle2 className="w-14 h-14 text-brand-primary" />
+                </div>
+                
+                <h2 className="text-3xl font-extrabold text-brand-dark mb-2">Registration Successful!</h2>
+                <p className="text-gray-600 mb-8 font-medium">Thank you for joining the Circular Economy Youth Empowerment Initiative.</p>
+                
+                <button 
+                    // Note: Ensure setStatus('idle') and the button are correctly defined/imported
+                    onClick={() => setStatus('idle')} 
+                    className="bg-brand-primary text-white px-10 py-3 rounded-full font-bold hover:bg-brand-dark transition-all shadow-lg hover:shadow-xl hover:-translate-y-1"
+                >
+                    Welldone
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// Note: The rest of the component continues below
+return (
+    <div className="bg-gradient-to-b from-white via-brand-light/40 to-brand-primary/5 min-h-screen py-24 px-4 relative">
+        
+        {/* --- LOADING OVERLAY --- */}
+        {status === 'submitting' && (
+            // 🚀 MINOR FIX: Added overflow-y-auto
+            <div className="fixed inset-0 z-[100] bg-white/90 backdrop-blur-md flex flex-col items-center justify-center overflow-y-auto">
+                <div className="relative">
+                    <div className="w-24 h-24 border-4 border-gray-200 border-t-brand-primary rounded-full animate-spin"></div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-16 h-16 bg-white rounded-full"></div>
+                    </div>
+                </div>
+                <p className="mt-6 text-xl font-bold text-brand-primary animate-pulse">Submitting Application...</p>
+                <p className="text-gray-500 text-sm mt-2">Please do not close this page.</p>
+            </div>
+        )}
+
+        {/* --- FAILED OVERLAY --- */}
+        {status === 'error' && (
+            // 🚀 MINOR FIX: Added overflow-y-auto
+            <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in-up overflow-y-auto">
+                <div className="bg-white p-10 rounded-[2rem] shadow-2xl text-center max-w-md w-full border border-red-100 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-2 bg-red-500"></div>
                     
-                    <div className="w-24 h-24 bg-brand-light rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
-                        <CheckCircle2 className="w-14 h-14 text-brand-primary" />
+                    <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <XCircle className="w-14 h-14 text-red-500" />
                     </div>
                     
-                    <h2 className="text-3xl font-extrabold text-brand-dark mb-2">Registration Successful!</h2>
-                    <p className="text-gray-600 mb-8 font-medium">Thank you for joining the Circular Economy Youth Empowerment Initiative.</p>
+                    <h2 className="text-3xl font-extrabold text-red-600 mb-2">Registration Failed</h2>
+                    <p className="text-gray-600 mb-8 font-medium">We couldn't submit your application. Please check your internet connection and try again.</p>
                     
-                    <button onClick={() => setStatus('idle')} className="bg-brand-primary text-white px-10 py-3 rounded-full font-bold hover:bg-brand-dark transition-all shadow-lg hover:shadow-xl hover:-translate-y-1">
-                        Welldone
-                    </button>
+                    <div className="flex justify-center gap-4">
+                        <button onClick={() => setStatus('idle')} className="px-8 py-3 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-colors">
+                            Close
+                        </button>
+                        {/* Note: Ensure handleFinalSubmit is correctly defined/imported */}
+                        <button onClick={handleFinalSubmit} className="bg-red-500 text-white px-8 py-3 rounded-full font-bold hover:bg-red-700 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1">
+                            Try Again
+                        </button>
+                    </div>
                 </div>
             </div>
-        );
-    }
-
-    return (
-        <div className="bg-gradient-to-b from-white via-brand-light/40 to-brand-primary/5 min-h-screen py-24 px-4 relative">
-            
-            {/* --- LOADING OVERLAY --- */}
-            {status === 'submitting' && (
-                <div className="fixed inset-0 z-[100] bg-white/90 backdrop-blur-md flex flex-col items-center justify-center">
-                    <div className="relative">
-                        <div className="w-24 h-24 border-4 border-gray-200 border-t-brand-primary rounded-full animate-spin"></div>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-16 h-16 bg-white rounded-full"></div>
-                        </div>
-                    </div>
-                    <p className="mt-6 text-xl font-bold text-brand-primary animate-pulse">Submitting Application...</p>
-                    <p className="text-gray-500 text-sm mt-2">Please do not close this page.</p>
-                </div>
-            )}
-
-            {/* --- FAILED OVERLAY --- */}
-            {status === 'error' && (
-                <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in-up">
-                    <div className="bg-white p-10 rounded-[2rem] shadow-2xl text-center max-w-md w-full border border-red-100 relative overflow-hidden">
-                        <div className="absolute top-0 left-0 w-full h-2 bg-red-500"></div>
-                        
-                        <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <XCircle className="w-14 h-14 text-red-500" />
-                        </div>
-                        
-                        <h2 className="text-3xl font-extrabold text-red-600 mb-2">Registration Failed</h2>
-                        <p className="text-gray-600 mb-8 font-medium">We couldn't submit your application. Please check your internet connection and try again.</p>
-                        
-                        <div className="flex justify-center gap-4">
-                             <button onClick={() => setStatus('idle')} className="px-8 py-3 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-colors">
-                                Close
-                            </button>
-                            <button onClick={handleFinalSubmit} className="bg-red-500 text-white px-8 py-3 rounded-full font-bold hover:bg-red-700 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1">
-                                Try Again
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
+        )}
+    
             <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
                 {/* Header */}
                 <div className="bg-gradient-to-r from-brand-primary to-brand-dark p-8 text-center relative overflow-hidden">
@@ -361,6 +379,29 @@ const Register: React.FC = () => {
                             </div>
                         </div>
                     </div>
+                    
+
+    {/* --- STATE OF ORIGIN (NEW FIELD) --- */}
+    <div className="md:col-span-1">
+        <label htmlFor="stateOfOrigin" className="block text-sm font-medium text-gray-700 mb-1">STATE OF ORIGIN <span className="text-red-500">*</span></label>
+        <select
+            id="stateOfOrigin"
+            name="stateOfOrigin"
+            value={formData.stateOfOrigin}
+            // Assumes standard handleChange function is used
+            onChange={handleChange} 
+            required
+            className="input-field"
+        >
+            <option value="" disabled>Select State of Origin</option>
+            {/* Populates options using the keys (state names) from constants.ts */}
+            {Object.keys(STATE_LGAS).map(stateName => (
+                <option key={stateName} value={stateName}>
+                    {stateName}
+                </option>
+            ))}
+        </select>
+    </div>
 
                     {/* Address */}
                     <div className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
@@ -369,11 +410,11 @@ const Register: React.FC = () => {
                         </h3>
                         <div className="grid md:grid-cols-2 gap-5">
                             <select required name="state" value={formData.state} onChange={handleChange} className="input-field">
-                                <option value="">Select State</option>
+                                <option value="">Select State Of Residence</option>
                                 {Object.keys(STATE_LGAS).map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                             <select required name="lga" value={formData.lga} onChange={handleChange} disabled={!formData.state} className="input-field disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed">
-                                <option value="">Select LGA</option>
+                                <option value="">Select LGA Of Residence</option>
                                 {lgas.map(l => <option key={l} value={l}>{l}</option>)}
                             </select>
                         </div>

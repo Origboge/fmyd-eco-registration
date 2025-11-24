@@ -160,17 +160,19 @@ else {
     }, []);
 
     // ✅ CORRECTION 2: Helper function to display stat value or loading indicator
-    const renderStatValue = (value: number | undefined) => {
-        if (loadingStats) {
-            return (
-                <div className="flex items-center justify-center text-brand-light">
-                    <Loader2 className="w-8 h-8 animate-spin" />
-                </div>
-            );
-        }
-        return value !== undefined ? value.toLocaleString() : '0';
-    };
+    // Home.tsx (around line 161)
 
+const renderStatValue = (value: number | undefined) => {
+    if (loadingStats) {
+        return (
+            // 🚀 FIX: Changed <div> to <span> to resolve the HTML nesting error
+            <span className="flex items-center justify-center text-brand-light">
+                <Loader2 className="w-8 h-8 animate-spin" />
+            </span>
+        );
+    }
+    return value !== undefined ? value.toLocaleString() : '0';
+};
 
     // Auto-scroll Effect for Gallery
     useEffect(() => {
@@ -215,7 +217,7 @@ else {
     const leaders = [
         { name: "BOLA AHMED TINUBU GCFR", role: "President Commander-in-Chief Of The Armed Forces Federal Republic Of Nigeria", quote: "Through a Youth-powered circular economy, we are building a prosperous Nigeria for all." },
         { name: "COMR. AYODELE OLAWANDE", role: "Minister Of Youth Development", quote: "Circular Economy Youth Empowerment Initiative: A Driving Force to Support, Empower, Protect Nigeria's Future Leaders." },
-        { name: "MR OLUBUNMI OLUSANYA", role: "Permanent Secretary", quote: "Every recycled item is a naira earned and a step towards wealth creation." }
+        { name: "DR.MARYAM ISMAILA KESHINRO", role: "Permanent Secretary", quote: "Every recycled item is a naira earned and a step towards wealth creation." }
     ];
 
     return (
@@ -295,7 +297,7 @@ else {
                                         The <span className="text-brand-dark font-bold">Waste to Wealth</span> initiative is a groundbreaking project designed to create job opportunities for youths by transforming waste into valuable resources.
                                     </p>
                                     <p>
-                                        Implemented by the <span className="font-bold text-brand-primary">Ministry of Youth Development</span> on the mandate of <span className="font-bold text-brand-dark">President Bola Ahmed Tinubu</span>, this initiative will empower young Nigerians to become job creators, develop waste-to-wealth businesses, contributing to achieving the <span className="font-bold text-brand-primary">Sustainable Development Goals (SDGs)</span>, mitigating climate change effect, reducing environmental pollution and fostering economic growth.
+                                        Implemented by the <span className="font-bold text-brand-primary">Ministry of Youth Development</span> on the mandate of <span className="font-bold text-brand-dark">President Bola Ahmed Tinubu</span>, this initiative empowers young Nigerians to become job creators, develop waste-to-wealth businesses, contributing to achieving the <span className="font-bold text-brand-primary">Sustainable Development Goals (SDGs)</span>, mitigating climate change effect, reducing environmental pollution and fostering economic growth.
                                     </p>
                                 </div>
                                 <Link 
@@ -513,7 +515,7 @@ else {
                     {/* Carousel */}
                     <Reveal animation="animate-fade-in-right" delay="0.2s">
                         <div ref={scrollRef} className="flex overflow-x-auto snap-x snap-mandatory gap-6 pb-8 -mx-4 px-4 md:mx-0 md:px-0 no-scrollbar">
-                            {[1, 2, 3, 4, 1, 2].map((num, idx) => (
+                            {[1, 2, 3, 4, 5, 6, 7, 1, 2].map((num, idx) => (
                                 <div key={idx} className="min-w-[300px] md:min-w-[400px] snap-center">
                                     <div className="relative rounded-2xl overflow-hidden shadow-lg group h-[250px] md:h-[300px] border-4 border-white hover:border-brand-light transition-colors">
                                         <img 
@@ -570,57 +572,64 @@ else {
             </section>
 
 {/* PARTNERS */}
-            <section className="py-20 bg-white border-t border-gray-100">
-                <div className="container mx-auto px-4 text-center">
-                    <Reveal animation="animate-fade-in">
-                        <div>
-                            <p className="text-gray-800 font-extrabold uppercase tracking-widest text-sm mb-12 border-b-2 border-brand-primary inline-block pb-2">In Partnership With</p>
-                            
-                            <div className="flex flex-wrap justify-center gap-2 md:gap-4">
-                                
-                                {[1, 2, 3, 4, 5].map((i) => {
-                                    const url = getPartnerUrl(i);
-                                    
-                                    const imageElement = (
-                                        <img 
-                                            src={getPartnerImage(i)} 
-                                            alt={`Partner ${i}`} 
-                                            loading="lazy"
-                                            // Added group-hover:scale-105 for the "raise up" effect
-                                            className="h-32 w-32 md:h-40 md:w-40 object-contain filter transition-all duration-300 group-hover:scale-105 transition-transform" 
-                                        />
-                                    );
+<section className="py-20 bg-white border-t border-gray-100">
+    <div className="container mx-auto px-4 text-center">
+        <Reveal animation="animate-fade-in">
+            <div>
+                {/* 1. Changed text to "OUR PARTNERS" and adjusted margin to mb-4 */}
+                <p className="text-gray-800 font-extrabold uppercase tracking-widest text-sm mb-4 border-b-2 border-brand-primary inline-block pb-2">
+                    OUR PARTNERS
+                </p>
+                
+                {/* 2. Added the mission statement */}
+                <p className="text-gray-600 max-w-3xl mx-auto mb-12">
+                    We are on a mission to protect support, empower, and protect Nigerian youths while preserving and protecting the Ecosystem. We invite organizations that share our vision to join us in creating a brighter future for the next generation
+                </p>
+                
+                <div className="flex flex-wrap justify-center gap-2 md:gap-4">
+                    
+                    {[1, 2, 3, 4, 5, 6].map((i) => {
+                        const url = getPartnerUrl(i);
+                        
+                        const imageElement = (
+                            <img 
+                                src={getPartnerImage(i)} 
+                                alt={`Partner ${i}`} 
+                                loading="lazy"
+                                // Added group-hover:scale-105 for the "raise up" effect
+                                className="h-32 w-32 md:h-40 md:w-40 object-contain filter transition-all duration-300 group-hover:scale-105 transition-transform" 
+                            />
+                        );
 
-                                    // Base class for wrapper, including 'group' to enable group-hover utility
-                                    const baseClass = "md:w-auto flex justify-center items-center p-4 group";
+                        // Base class for wrapper, including 'group' to enable group-hover utility
+                        const baseClass = "md:w-auto flex justify-center items-center p-4 group";
 
-                                    return url ? (
-                                        // RENDER <a> TAG (Clickable - uses shadow-xl on hover)
-                                        <a 
-                                            key={i} 
-                                            href={url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className={baseClass + " cursor-pointer hover:shadow-xl rounded-lg"} 
-                                        >
-                                            {imageElement}
-                                        </a>
-                                    ) : (
-                                        // RENDER <div> TAG (Static - uses shadow-lg on hover for visual feedback)
-                                        <div 
-                                            key={i} 
-                                            className={baseClass + " hover:shadow-lg rounded-lg"}
-                                        >
-                                            {imageElement}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    </Reveal>
-                </div>
-            </section>
-
+                        return url ? (
+                            // RENDER <a> TAG (Clickable - uses shadow-xl on hover)
+                            <a 
+                                key={i} 
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={baseClass + " cursor-pointer hover:shadow-xl rounded-lg"} 
+                            >
+                                {imageElement}
+                            </a>
+                        ) : (
+                            // RENDER <div> TAG (Static - uses shadow-lg on hover for visual feedback)
+                            <div 
+                                key={i} 
+                                className={baseClass + " hover:shadow-lg rounded-lg"}
+                            >
+                                {imageElement}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        </Reveal>
+    </div>
+</section>
             <style>{`
                 @keyframes slow-zoom {
                     0% { transform: scale(1); }

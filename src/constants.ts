@@ -91,7 +91,7 @@ export const getLeaderImage = (name: string) => {
     }
 
     // Match "MR OLUBUNMI OLUSANYA" (Permanent Secretary)
-    if (lowerName.includes("olusanya")) {
+    if (lowerName.includes("maryam")) {
         return "/images/ps.webp";
     }
     
@@ -109,6 +109,8 @@ export const getPartnerImage = (index: number) => {
         "images/doltma.webp", // Index 2 maps to this
         "images/partner-2.webp",
         "images/partner-4.webp",
+        "images/partner-5.webp",
+
         
     ];
     // Note: In Home.tsx, you might be passing 1, 2, 3... so we adjust index
@@ -136,9 +138,11 @@ export const getTeamActivityImage = (index: number) => {
     const activities = [
         "images/gallery-1.webp",
         "images/gallery-2.webp",
-        "images/gallery-3.webp",
+        "images/gallery-6.webp",
         "images/gallery-4.webp",
         "images/gallery-5.webp",
+        "images/gallery-7.webp",
+        "images/gallery-3.webp",
 
     ];
     return activities[index] || activities[0];
