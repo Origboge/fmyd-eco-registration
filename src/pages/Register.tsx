@@ -5,16 +5,16 @@ import { useState, useEffect } from 'react';
 import { signInAnonymously } from 'firebase/auth'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; 
-// ✅ NEW: Functions Imports for OTP
+// ✅ FUNCTIONS IMPORTS
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
-import type { ChangeEvent, FormEvent } from 'react';
+import type { ChangeEvent } from 'react';
 import { STATE_LGAS } from '../constants';
 import { auth, db, storage } from '../services/firebase';
 
 import type { RegistrationFormData } from '../types'
-// ✅ NEW: Added Loader2 and Check icons
-import { CheckCircle2, Upload, X, XCircle, Image as ImageIcon, Loader2, Check } from 'lucide-react';
+// ✅ ICONS (Added 'X' back for the Terms modal)
+import { CheckCircle2, Upload, XCircle, Image as ImageIcon, Loader2, Check, X } from 'lucide-react';
 
 const Register: React.FC = () => {
     const [formData, setFormData] = useState<RegistrationFormData>({
@@ -29,6 +29,8 @@ const Register: React.FC = () => {
     
     // Submission Status State
     const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+    
+    // ✅ RESTORED: Terms Modal State
     const [showTerms, setShowTerms] = useState(false);
 
     // Visual & Validation State
@@ -36,12 +38,13 @@ const Register: React.FC = () => {
     const [fieldErrors, setFieldErrors] = useState<{phone?: string, email?: string}>({});
     const [fileErrors, setFileErrors] = useState<{passport?: string, nin?: string}>({});
 
-    // --- ✅ NEW: OTP STATE ---
+    // --- ✅ OTP STATE ---
     const [otpSent, setOtpSent] = useState(false);
     const [otpCode, setOtpCode] = useState('');
     const [isEmailVerified, setIsEmailVerified] = useState(false);
     const [verifying, setVerifying] = useState(false);
     const [otpError, setOtpError] = useState('');
+    const [feedbackMsg, setFeedbackMsg] = useState(''); 
 
     const functions = getFunctions();
 
@@ -58,27 +61,55 @@ const Register: React.FC = () => {
         };
     }, [previews]);
 
-    // --- ✅ NEW: OTP FUNCTIONS ---
-
-    // 1. Send OTP
+    // --- ✅ LOGIC: SEND OTP (STRICT VALIDATION) ---
     const handleSendOtp = async () => {
-        if (!formData.email) {
-            alert("Please enter an email address first.");
-            return;
-        }
-        if (fieldErrors.email) {
-            alert("Please enter a valid email address.");
+        setOtpError('');
+        setFeedbackMsg('');
+
+        // 1. STRICT VALIDATION: Check every single string field
+        const requiredFields: (keyof RegistrationFormData)[] = [
+            'firstName', 'lastName', 'email', 'phone', 'dob', 'sex',
+            'stateOfOrigin', 'state', 'lga', 'address', 'landmark', 'trainingArea'
+        ];
+
+        // Find the first missing field
+        const missingField = requiredFields.find(field => !formData[field] || formData[field].toString().trim() === '');
+
+        if (missingField) {
+            // Convert camelCase to Readable Text (e.g., stateOfOrigin -> State Of Origin)
+            const readableField = missingField.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+            setOtpError(`Please fill in the "${readableField}" field before verifying.`);
+            
+            // Scroll to top so they see what is missing
+            window.scrollTo({ top: 100, behavior: 'smooth' });
             return;
         }
 
+        // 2. Specific Checks
+        if (fieldErrors.email || fieldErrors.phone) {
+            setOtpError("Please fix the validation errors (Email/Phone) first.");
+            return;
+        }
+        if (age !== null && age < 18) {
+            setOtpError("You must be 18+ to register.");
+            return;
+        }
+        if (!formData.passport || !formData.nin) {
+            setOtpError("Please upload both Passport and NIN documents.");
+            return;
+        }
+
+        // 3. Send OTP
         setVerifying(true);
-        setOtpError('');
         try {
             const sendOtpFn = httpsCallable(functions, 'sendRegistrationOtp');
-            // We send the email and first name (for personalization)
             await sendOtpFn({ email: formData.email, name: formData.firstName }); 
+            
             setOtpSent(true);
-            alert(`Verification code sent to ${formData.email}`);
+            
+            // ✅ SIMPLE FEEDBACK (No confusing full-screen popup)
+            setFeedbackMsg(`Code sent to ${formData.email}. Please enter it below.`);
+
         } catch (error: any) {
             console.error("OTP Error:", error);
             setOtpError(error.message || 'Failed to send code. Check internet or email.');
@@ -87,21 +118,28 @@ const Register: React.FC = () => {
         }
     };
 
-    // 2. Verify OTP
+    // --- ✅ LOGIC: VERIFY OTP -> THEN SHOW TERMS ---
     const handleVerifyOtp = async () => {
         if (otpCode.length < 6) return;
+        
         setVerifying(true);
         setOtpError('');
+        
         try {
+            // 1. Verify Code with Backend
             const verifyOtpFn = httpsCallable(functions, 'verifyRegistrationOtp');
             await verifyOtpFn({ email: formData.email, code: otpCode });
+            
             setIsEmailVerified(true);
-            // We don't alert here to keep flow smooth, the UI will update
+            setVerifying(false); // Stop loading so we can show the modal
+            
+            // 2. 🚀 OPEN TERMS MODAL (User must accept to submit)
+            setShowTerms(true);
+
         } catch (error: any) {
             console.error("Verification Error:", error);
             setOtpError('Invalid code or expired. Please try again.');
-        } finally {
-            setVerifying(false);
+            setVerifying(false); 
         }
     };
 
@@ -184,26 +222,6 @@ const Register: React.FC = () => {
         }
     };
 
-    const handleInitialSubmit = (e: FormEvent) => {
-        e.preventDefault();
-        
-        if (fieldErrors.phone || fieldErrors.email) {
-            alert("Please fix the errors in the form before submitting.");
-            return;
-        }
-
-        if (age !== null && age < 18) {
-            alert("You must be 18 years or older to register.");
-            return;
-        }
-        if (!formData.passport || !formData.nin) {
-            alert("Please upload both Passport and NIN.");
-            return;
-        }
-        
-        setShowTerms(true);
-    };
-
     const handleFinalSubmit = async () => {
         setShowTerms(false);
         setStatus('submitting');
@@ -254,6 +272,7 @@ const Register: React.FC = () => {
         } catch (err: any) {
             console.error(err);
             setStatus('error');
+            setVerifying(false); 
         }
     };
 
@@ -318,7 +337,7 @@ const Register: React.FC = () => {
                     <p className="text-brand-light text-sm md:text-base relative z-10 font-medium">Fill in your details accurately to join the training.</p>
                 </div>
 
-                <form onSubmit={handleInitialSubmit} className="p-6 md:p-10 space-y-8">
+                <form className="p-6 md:p-10 space-y-8">
                     
                     {/* Personal Information */}
                     <div className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
@@ -461,91 +480,80 @@ const Register: React.FC = () => {
                         </select>
                     </div>
 
-                    {/* --- ✅ NEW: EMAIL VERIFICATION & SUBMIT SECTION --- */}
+                    {/* --- ✅ EMAIL VERIFICATION & AUTO SUBMIT SECTION --- */}
                     <div className="mt-8 p-6 bg-gray-50 border border-gray-200 rounded-2xl shadow-sm">
                         <h3 className="text-lg font-bold text-brand-dark mb-4 flex items-center gap-2">
                             <span className="bg-brand-primary text-white text-xs px-2 py-1 rounded">REQUIRED</span>
                             Email Verification
                         </h3>
 
-                        {/* Condition: Show Submit Button ONLY if Verified */}
-                        {isEmailVerified ? (
-                            <div className="animate-fade-in">
-                                <div className="bg-green-50 border border-green-200 p-4 rounded-xl flex items-center gap-3 mb-4">
-                                    <div className="h-10 w-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                                        <Check className="text-green-600 w-5 h-5" />
-                                    </div>
-                                    <div>
-                                        <h4 className="text-green-800 font-bold text-sm">Email Verified</h4>
-                                        <p className="text-green-700 text-xs">You can now submit your application.</p>
-                                    </div>
-                                </div>
-                                
-                                <button 
-                                    type="submit" 
-                                    disabled={status === 'submitting'}
-                                    className="w-full bg-brand-primary text-white font-bold text-xl py-5 rounded-2xl shadow-lg hover:bg-brand-dark hover:shadow-brand-primary/30 hover:-translate-y-1 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-                                >
-                                    Submit Application
-                                </button>
+                        {/* 1. MESSAGE AREA (Toast) */}
+                        {feedbackMsg && (
+                            <div className="bg-green-100 border border-green-300 text-green-800 px-4 py-3 rounded-xl mb-4 text-sm font-bold text-center animate-fade-in-down shadow-sm flex items-center justify-center gap-2">
+                                <Check size={16} /> {feedbackMsg}
                             </div>
-                        ) : (
-                            /* Verification Form */
-                            <div className="space-y-4">
+                        )}
+
+                        {/* 2. ERROR AREA */}
+                        {otpError && (
+                            <div className="bg-red-50 text-red-600 p-3 mb-4 rounded-lg text-sm flex items-center gap-2 animate-pulse border border-red-100">
+                                <XCircle size={16} /> {otpError}
+                            </div>
+                        )}
+
+                        {/* 3. INPUTS & BUTTONS */}
+                        {!otpSent ? (
+                            <div className="space-y-3">
                                 <p className="text-sm text-gray-600">
                                     We need to verify your email <span className="font-bold text-brand-dark">{formData.email || '...'}</span> before you can submit.
                                 </p>
-
-                                {otpError && (
-                                    <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2 animate-pulse">
-                                        <XCircle size={16} /> {otpError}
-                                    </div>
-                                )}
-
-                                {!otpSent ? (
+                                <button
+                                    onClick={handleSendOtp}
+                                    disabled={verifying}
+                                    type="button"
+                                    className="w-full py-3 bg-brand-dark text-white rounded-xl font-bold hover:bg-black transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {verifying ? <Loader2 className="animate-spin" /> : 'Send Verification Code'}
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="animate-fade-in-up">
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Enter 6-Digit Code</label>
+                                
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <input
+                                        type="text"
+                                        maxLength={6}
+                                        value={otpCode}
+                                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                                        className="w-full sm:flex-1 p-3 border border-gray-300 rounded-xl text-center tracking-[0.5em] font-bold text-lg focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 outline-none transition-all"
+                                        placeholder="000000"
+                                    />
                                     <button
-                                        onClick={handleSendOtp}
-                                        disabled={verifying || !formData.email}
-                                        type="button" 
-                                        className="w-full py-3 bg-brand-dark text-white rounded-xl font-bold hover:bg-black transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        onClick={handleVerifyOtp}
+                                        disabled={verifying || otpCode.length < 6}
+                                        type="button"
+                                        className="w-full sm:w-auto px-6 py-3 bg-brand-primary text-white rounded-xl font-bold hover:bg-green-600 disabled:opacity-50 flex items-center justify-center shadow-md whitespace-nowrap"
                                     >
-                                        {verifying ? <Loader2 className="animate-spin" /> : 'Send Verification Code'}
+                                        {verifying ? <Loader2 className="animate-spin" /> : 'Verify'}
                                     </button>
-                                ) : (
-                                    <div className="animate-fade-in-up">
-                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Enter 6-Digit Code</label>
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="text"
-                                                maxLength={6}
-                                                value={otpCode}
-                                                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                                                className="flex-1 p-3 border border-gray-300 rounded-xl text-center tracking-[0.5em] font-bold text-lg focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 outline-none transition-all"
-                                                placeholder="000000"
-                                            />
-                                            <button
-                                                onClick={handleVerifyOtp}
-                                                disabled={verifying || otpCode.length < 6}
-                                                type="button"
-                                                className="px-6 py-3 bg-brand-primary text-white rounded-xl font-bold hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center shadow-md"
-                                            >
-                                                {verifying ? <Loader2 className="animate-spin" /> : 'Verify'}
-                                            </button>
-                                        </div>
-                                        <button onClick={() => setOtpSent(false)} type="button" className="text-xs text-gray-500 mt-3 hover:text-brand-primary underline">
-                                            Wrong email? Resend Code
-                                        </button>
-                                    </div>
-                                )}
+                                </div>
+
+                                <p className="text-[10px] text-gray-400 mt-3 text-center">
+                                    Click "Verify" to proceed to Terms & Conditions.
+                                </p>
+                                <button onClick={() => setOtpSent(false)} type="button" className="text-xs text-gray-500 mt-2 hover:text-brand-primary underline w-full text-center">
+                                    Wrong email? Resend Code
+                                </button>
                             </div>
                         )}
                     </div>
                 </form>
             </div>
 
-            {/* Terms Modal */}
+            {/* ✅ TERMS MODAL (Restored) */}
             {showTerms && (
-                <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in-up">
+                <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in-up">
                     <div className="bg-white rounded-3xl max-w-2xl w-full p-6 md:p-8 max-h-[80vh] flex flex-col shadow-2xl border border-gray-200">
                         <div className="flex justify-between items-center mb-4 border-b pb-4">
                             <h3 className="text-2xl font-bold text-brand-dark">Terms & Conditions</h3>
@@ -565,6 +573,7 @@ const Register: React.FC = () => {
                         </div>
                         <div className="flex gap-4 justify-end shrink-0">
                             <button onClick={() => setShowTerms(false)} className="px-6 py-3 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-colors">Decline</button>
+                            {/* This is the REAL submit trigger */}
                             <button onClick={handleFinalSubmit} className="px-8 py-3 bg-brand-primary text-white font-bold rounded-xl hover:bg-brand-dark transition-colors shadow-lg hover:shadow-xl">Accept & Submit</button>
                         </div>
                     </div>
