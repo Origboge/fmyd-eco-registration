@@ -305,11 +305,11 @@ return (
             </div>
         )}
     
-            <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
+            <div className="-mt-11 pt-0 pb-0 -mb-11 max-w-4xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
                 {/* Header */}
                 <div className="bg-gradient-to-r from-brand-primary to-brand-dark p-8 text-center relative overflow-hidden">
                     <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at center, white 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
-                    <h2 className="text-3xl md:text-4xl font-extrabold text-white relative z-10 mb-2">Registration Form</h2>
+                    <h2 className="text-3xl md:text-4xl font-extrabold text-white relative z-10 mb-2 ">Registration Form</h2>
                     <div className="h-1 w-20 bg-brand-light mx-auto rounded-full mb-3 relative z-10"></div>
                     <p className="text-brand-light text-sm md:text-base relative z-10 font-medium">Fill in your details accurately to join the training.</p>
                 </div>
