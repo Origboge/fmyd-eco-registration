@@ -1,40 +1,34 @@
 import * as React from 'react';
-// ✅ Imports values (functions)
 import { useState, useEffect } from 'react';
 
-// ✅ NEW MODULAR IMPORTS
+// ✅ MODULAR IMPORTS
 import { signInAnonymously } from 'firebase/auth'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; 
+// ✅ NEW: Functions Imports for OTP
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
-// ✅ Imports types (interfaces/types)
 import type { ChangeEvent, FormEvent } from 'react';
 import { STATE_LGAS } from '../constants';
 import { auth, db, storage } from '../services/firebase';
 
-// 🛑 REMOVED V8/COMPAT IMPORTS:
-// import firebase from 'firebase/compat/app';
-// import 'firebase/compat/firestore'; 
-
 import type { RegistrationFormData } from '../types'
-import { CheckCircle2, Upload, X, XCircle, Image as ImageIcon } from 'lucide-react';
+// ✅ NEW: Added Loader2 and Check icons
+import { CheckCircle2, Upload, X, XCircle, Image as ImageIcon, Loader2, Check } from 'lucide-react';
 
 const Register: React.FC = () => {
     const [formData, setFormData] = useState<RegistrationFormData>({
         firstName: '', middleName: '', lastName: '', email: '', phone: '',
         dob: '', sex: '', 
-        // 🚀 NEW: State of Origin added here
         stateOfOrigin: '', 
-        // Existing State of Residence and LGA fields follow
         state: '', lga: '', 
         address: '', landmark: '', trainingArea: '',
     });
     const [age, setAge] = useState<number | null>(null);
     const [lgas, setLgas] = useState<string[]>([]);
     
-    // Submission Status State: 'idle' | 'submitting' | 'success' | 'error'
+    // Submission Status State
     const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
-    
     const [showTerms, setShowTerms] = useState(false);
 
     // Visual & Validation State
@@ -42,12 +36,21 @@ const Register: React.FC = () => {
     const [fieldErrors, setFieldErrors] = useState<{phone?: string, email?: string}>({});
     const [fileErrors, setFileErrors] = useState<{passport?: string, nin?: string}>({});
 
+    // --- ✅ NEW: OTP STATE ---
+    const [otpSent, setOtpSent] = useState(false);
+    const [otpCode, setOtpCode] = useState('');
+    const [isEmailVerified, setIsEmailVerified] = useState(false);
+    const [verifying, setVerifying] = useState(false);
+    const [otpError, setOtpError] = useState('');
+
+    const functions = getFunctions();
+
     // Scroll to top on mount
     useEffect(() => {
         window.scrollTo(0, 0);
     }, []);
 
-    // Cleanup object URLs to avoid memory leaks
+    // Cleanup object URLs
     useEffect(() => {
         return () => {
             if (previews.passport) URL.revokeObjectURL(previews.passport);
@@ -55,45 +58,81 @@ const Register: React.FC = () => {
         };
     }, [previews]);
 
-    // Handle Input Change with Strict Formatting
+    // --- ✅ NEW: OTP FUNCTIONS ---
+
+    // 1. Send OTP
+    const handleSendOtp = async () => {
+        if (!formData.email) {
+            alert("Please enter an email address first.");
+            return;
+        }
+        if (fieldErrors.email) {
+            alert("Please enter a valid email address.");
+            return;
+        }
+
+        setVerifying(true);
+        setOtpError('');
+        try {
+            const sendOtpFn = httpsCallable(functions, 'sendRegistrationOtp');
+            // We send the email and first name (for personalization)
+            await sendOtpFn({ email: formData.email, name: formData.firstName }); 
+            setOtpSent(true);
+            alert(`Verification code sent to ${formData.email}`);
+        } catch (error: any) {
+            console.error("OTP Error:", error);
+            setOtpError(error.message || 'Failed to send code. Check internet or email.');
+        } finally {
+            setVerifying(false);
+        }
+    };
+
+    // 2. Verify OTP
+    const handleVerifyOtp = async () => {
+        if (otpCode.length < 6) return;
+        setVerifying(true);
+        setOtpError('');
+        try {
+            const verifyOtpFn = httpsCallable(functions, 'verifyRegistrationOtp');
+            await verifyOtpFn({ email: formData.email, code: otpCode });
+            setIsEmailVerified(true);
+            // We don't alert here to keep flow smooth, the UI will update
+        } catch (error: any) {
+            console.error("Verification Error:", error);
+            setOtpError('Invalid code or expired. Please try again.');
+        } finally {
+            setVerifying(false);
+        }
+    };
+
+    // --- EXISTING HANDLERS ---
+
     const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         
-        // 1. Name Validation (Letters Only + Force ALL CAPS)
         if (['firstName', 'middleName', 'lastName'].includes(name)) {
-            if (!/^[A-Za-z\s]*$/.test(value)) return; // Block numbers/symbols
-            
-            // Force UPPERCASE and Cast to satisfy TS for dynamic keys
+            if (!/^[A-Za-z\s]*$/.test(value)) return; 
             setFormData(prev => ({ ...prev, [name]: value.toUpperCase() } as RegistrationFormData));
             return;
         }
 
-        // 2. Phone Validation (Numbers Only)
         if (name === 'phone') {
              if (!/^[0-9+\-\s]*$/.test(value)) {
                 setFieldErrors(prev => ({ ...prev, phone: "Only numbers are allowed." }));
-                
-                // Auto-clear error after 2 seconds so it doesn't stick
-                setTimeout(() => {
-                    setFieldErrors(prev => ({ ...prev, phone: undefined }));
-                }, 2000);
-                
-                return; // Block invalid input
+                setTimeout(() => setFieldErrors(prev => ({ ...prev, phone: undefined })), 2000);
+                return; 
              } else {
                 setFieldErrors(prev => ({ ...prev, phone: undefined }));
              }
         }
 
-        // Standard update with type assertion
         setFormData(prev => ({ ...prev, [name]: value } as RegistrationFormData));
 
-        // Dynamic LGA loading
         if (name === 'state') {
             setLgas(STATE_LGAS[value] || []);
             setFormData(prev => ({ ...prev, state: value, lga: '' } as RegistrationFormData));
         }
 
-        // Age Calculation
         if (name === 'dob') {
             const birth = new Date(value);
             const today = new Date();
@@ -106,7 +145,6 @@ const Register: React.FC = () => {
         }
     };
 
-    // Strict Email Check on Blur
     const handleEmailBlur = () => {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (formData.email && !emailRegex.test(formData.email)) {
@@ -114,24 +152,24 @@ const Register: React.FC = () => {
         } else {
              setFieldErrors(prev => ({ ...prev, email: undefined }));
         }
+        
+        // Reset verification if email changes
+        if (isEmailVerified) {
+            setIsEmailVerified(false);
+            setOtpSent(false);
+            setOtpCode('');
+        }
     };
 
-    // Handle File Change with Preview
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
         const { name, files } = e.target;
-        
-        // Reset specific file error first
         setFileErrors(prev => ({...prev, [name]: undefined}));
 
         if (files && files[0]) {
             const file = files[0];
-            
-            // Check 25KB Limit
             if (file.size > 25 * 1024) { 
                 setFileErrors(prev => ({...prev, [name]: "File too large. Max size is 25KB."}));
-                e.target.value = ''; // Clear input
-                
-                // Clear preview if it existed
+                e.target.value = ''; 
                 setPreviews(prev => {
                     const newPreviews = {...prev};
                     if (name === 'passport') delete newPreviews.passport;
@@ -140,12 +178,8 @@ const Register: React.FC = () => {
                 });
                 return;
             }
-            
-            // Create Preview
             const url = URL.createObjectURL(file);
             setPreviews(prev => ({ ...prev, [name]: url }));
-            
-            // Explicitly cast the dynamic update for FileList
             setFormData(prev => ({ ...prev, [name]: files } as RegistrationFormData));
         }
     };
@@ -175,55 +209,47 @@ const Register: React.FC = () => {
         setStatus('submitting');
 
         try {
-            // 1. Auth (FIXED: V8/compat -> Modular V9/V10)
             let user = auth.currentUser;
             if (!user) {
-                // 🛑 NEW SYNTAX: signInAnonymously(auth)
                 const userCred = await signInAnonymously(auth); 
                 user = userCred.user;
             }
 
             if (!user) throw new Error("Authentication failed.");
 
-            // 2. Upload Files (FIXED: V8/compat -> Modular V9/V10)
             const passportFile = formData.passport![0];
             const ninFile = formData.nin![0];
             
-            // 🛑 NEW SYNTAX: ref(storage, path)
             const passportRef = ref(storage, `passport/${user.uid}/${Date.now()}_${passportFile.name}`);
             const ninRef = ref(storage, `nin/${user.uid}/${Date.now()}_${ninFile.name}`);
 
-            // 🛑 NEW SYNTAX: uploadBytes(ref, file)
             await uploadBytes(passportRef, passportFile);
             await uploadBytes(ninRef, ninFile);
 
-            // 🛑 NEW SYNTAX: getDownloadURL(ref)
             const passportUrl = await getDownloadURL(passportRef);
             const ninUrl = await getDownloadURL(ninRef);
 
-            // 3. Save Data (FIXED: V8/compat -> Modular V9/V10)
-            // 🛑 NEW SYNTAX: addDoc(collection(db, 'collectionName'), data)
             await addDoc(collection(db, 'registrations'), {
                 ...formData,
-                // ✅ CRITICAL FIX: Explicitly including the field ensures it reaches BigQuery
                 stateOfOrigin: formData.stateOfOrigin, 
                 passportURL: passportUrl,
                 ninURL: ninUrl,
                 age: age,
                 userId: user.uid,
-                // 🛑 NEW SYNTAX: serverTimestamp()
                 timestamp: serverTimestamp(), 
-                passport: null, // Don't save FileList to DB
-                nin: null // Don't save FileList to DB
+                passport: null, 
+                nin: null 
             });
 
             setStatus('success');
-            // ✅ Cleaned up the reset call for consistency
             setFormData({
                 firstName: '', middleName: '', lastName: '', email: '', phone: '',
                 dob: '', sex: '', stateOfOrigin: '', state: '', lga: '', address: '', landmark: '', trainingArea: ''
             });
             setPreviews({});
+            setIsEmailVerified(false);
+            setOtpSent(false);
+            setOtpCode('');
 
         } catch (err: any) {
             console.error(err);
@@ -231,82 +257,60 @@ const Register: React.FC = () => {
         }
     };
 
-   // --- RENDER: SUCCESS OVERLAY ---
-if (status === 'success') {
+    // --- RENDER ---
+
+    if (status === 'success') {
+        return (
+            <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-gradient-to-b from-white to-brand-light/30 p-4 overflow-y-auto">
+                <div className="bg-white p-10 rounded-[2rem] shadow-2xl text-center max-w-md w-full animate-fade-in-up border border-brand-light relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-2 bg-brand-primary"></div>
+                    <div className="w-24 h-24 bg-brand-light rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
+                        <CheckCircle2 className="w-14 h-14 text-brand-primary" />
+                    </div>
+                    <h2 className="text-3xl font-extrabold text-brand-dark mb-2">Registration Successful!</h2>
+                    <p className="text-gray-600 mb-8 font-medium">Thank you for joining the Circular Economy Youth Empowerment Initiative.</p>
+                    <button onClick={() => setStatus('idle')} className="bg-brand-primary text-white px-10 py-3 rounded-full font-bold hover:bg-brand-dark transition-all shadow-lg hover:shadow-xl hover:-translate-y-1">
+                        Welldone
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        // 🚀 CRITICAL FIX: Changed to fixed inset-0 z-[100] for full-screen coverage
-        // Added overflow-y-auto for safety and removed pt-24 which is not needed in fixed view
-        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-gradient-to-b from-white to-brand-light/30 p-4 overflow-y-auto">
-            <div className="bg-white p-10 rounded-[2rem] shadow-2xl text-center max-w-md w-full animate-fade-in-up border border-brand-light relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-2 bg-brand-primary"></div>
-                
-                <div className="w-24 h-24 bg-brand-light rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
-                    <CheckCircle2 className="w-14 h-14 text-brand-primary" />
+        <div className="bg-gradient-to-b from-white via-brand-light/40 to-brand-primary/5 min-h-screen py-24 px-4 relative">
+            
+            {status === 'submitting' && (
+                <div className="fixed inset-0 z-[100] bg-white/90 backdrop-blur-md flex flex-col items-center justify-center overflow-y-auto">
+                    <div className="relative">
+                        <div className="w-24 h-24 border-4 border-gray-200 border-t-brand-primary rounded-full animate-spin"></div>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-16 h-16 bg-white rounded-full"></div>
+                        </div>
+                    </div>
+                    <p className="mt-6 text-xl font-bold text-brand-primary animate-pulse">Submitting Application...</p>
+                    <p className="text-gray-500 text-sm mt-2">Please do not close this page.</p>
                 </div>
-                
-                <h2 className="text-3xl font-extrabold text-brand-dark mb-2">Registration Successful!</h2>
-                <p className="text-gray-600 mb-8 font-medium">Thank you for joining the Circular Economy Youth Empowerment Initiative.</p>
-                
-                <button 
-                    // Note: Ensure setStatus('idle') and the button are correctly defined/imported
-                    onClick={() => setStatus('idle')} 
-                    className="bg-brand-primary text-white px-10 py-3 rounded-full font-bold hover:bg-brand-dark transition-all shadow-lg hover:shadow-xl hover:-translate-y-1"
-                >
-                    Welldone
-                </button>
-            </div>
-        </div>
-    );
-}
+            )}
 
-// Note: The rest of the component continues below
-return (
-    <div className="bg-gradient-to-b from-white via-brand-light/40 to-brand-primary/5 min-h-screen py-24 px-4 relative">
-        
-        {/* --- LOADING OVERLAY --- */}
-        {status === 'submitting' && (
-            // 🚀 MINOR FIX: Added overflow-y-auto
-            <div className="fixed inset-0 z-[100] bg-white/90 backdrop-blur-md flex flex-col items-center justify-center overflow-y-auto">
-                <div className="relative">
-                    <div className="w-24 h-24 border-4 border-gray-200 border-t-brand-primary rounded-full animate-spin"></div>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-16 h-16 bg-white rounded-full"></div>
+            {status === 'error' && (
+                <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in-up overflow-y-auto">
+                    <div className="bg-white p-10 rounded-[2rem] shadow-2xl text-center max-w-md w-full border border-red-100 relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-2 bg-red-500"></div>
+                        <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <XCircle className="w-14 h-14 text-red-500" />
+                        </div>
+                        <h2 className="text-3xl font-extrabold text-red-600 mb-2">Registration Failed</h2>
+                        <p className="text-gray-600 mb-8 font-medium">We couldn't submit your application. Please check your internet connection and try again.</p>
+                        <div className="flex justify-center gap-4">
+                            <button onClick={() => setStatus('idle')} className="px-8 py-3 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-colors">Close</button>
+                            <button onClick={handleFinalSubmit} className="bg-red-500 text-white px-8 py-3 rounded-full font-bold hover:bg-red-700 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1">Try Again</button>
+                        </div>
                     </div>
                 </div>
-                <p className="mt-6 text-xl font-bold text-brand-primary animate-pulse">Submitting Application...</p>
-                <p className="text-gray-500 text-sm mt-2">Please do not close this page.</p>
-            </div>
-        )}
-
-        {/* --- FAILED OVERLAY --- */}
-        {status === 'error' && (
-            // 🚀 MINOR FIX: Added overflow-y-auto
-            <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in-up overflow-y-auto">
-                <div className="bg-white p-10 rounded-[2rem] shadow-2xl text-center max-w-md w-full border border-red-100 relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-2 bg-red-500"></div>
-                    
-                    <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <XCircle className="w-14 h-14 text-red-500" />
-                    </div>
-                    
-                    <h2 className="text-3xl font-extrabold text-red-600 mb-2">Registration Failed</h2>
-                    <p className="text-gray-600 mb-8 font-medium">We couldn't submit your application. Please check your internet connection and try again.</p>
-                    
-                    <div className="flex justify-center gap-4">
-                        <button onClick={() => setStatus('idle')} className="px-8 py-3 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-colors">
-                            Close
-                        </button>
-                        {/* Note: Ensure handleFinalSubmit is correctly defined/imported */}
-                        <button onClick={handleFinalSubmit} className="bg-red-500 text-white px-8 py-3 rounded-full font-bold hover:bg-red-700 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1">
-                            Try Again
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )}
+            )}
     
             <div className="-mt-11 pt-0 pb-0 -mb-11 max-w-4xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
-                {/* Header */}
                 <div className="bg-gradient-to-r from-brand-primary to-brand-dark p-8 text-center relative overflow-hidden">
                     <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at center, white 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
                     <h2 className="text-3xl md:text-4xl font-extrabold text-white relative z-10 mb-2 ">Registration Form</h2>
@@ -318,44 +322,19 @@ return (
                     
                     {/* Personal Information */}
                     <div className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-                        <h3 className="text-lg font-bold text-brand-primary border-b-2 border-brand-primary/10 pb-2 mb-6 flex items-center gap-2 uppercase tracking-wider">
-                            Personal Information
-                        </h3>
+                        <h3 className="text-lg font-bold text-brand-primary border-b-2 border-brand-primary/10 pb-2 mb-6 flex items-center gap-2 uppercase tracking-wider">Personal Information</h3>
                         <div className="grid md:grid-cols-3 gap-5">
-                            <div>
-                                <input required name="firstName" value={formData.firstName} onChange={handleChange} placeholder="First Name" className="input-field uppercase-input" />
-                            </div>
-                            <div>
-                                <input required name="middleName" value={formData.middleName} onChange={handleChange} placeholder="Middle Name" className="input-field uppercase-input" />
-                            </div>
-                            <div>
-                                <input required name="lastName" value={formData.lastName} onChange={handleChange} placeholder="Last Name" className="input-field uppercase-input" />
-                            </div>
+                            <div><input required name="firstName" value={formData.firstName} onChange={handleChange} placeholder="First Name" className="input-field uppercase-input" /></div>
+                            <div><input required name="middleName" value={formData.middleName} onChange={handleChange} placeholder="Middle Name" className="input-field uppercase-input" /></div>
+                            <div><input required name="lastName" value={formData.lastName} onChange={handleChange} placeholder="Last Name" className="input-field uppercase-input" /></div>
                         </div>
                         <div className="grid md:grid-cols-2 gap-5 mt-5">
                             <div>
-                                <input 
-                                    required 
-                                    type="email" 
-                                    name="email" 
-                                    value={formData.email} 
-                                    onChange={handleChange} 
-                                    onBlur={handleEmailBlur}
-                                    placeholder="Email Address" 
-                                    className={`input-field ${fieldErrors.email ? 'border-red-500 focus:ring-red-200' : ''}`} 
-                                />
+                                <input required type="email" name="email" value={formData.email} onChange={handleChange} onBlur={handleEmailBlur} placeholder="Email Address" className={`input-field ${fieldErrors.email ? 'border-red-500 focus:ring-red-200' : ''}`} />
                                 {fieldErrors.email && <p className="text-red-500 text-xs font-bold mt-1 ml-1">{fieldErrors.email}</p>}
                             </div>
                             <div>
-                                <input 
-                                    required 
-                                    type="tel" 
-                                    name="phone" 
-                                    value={formData.phone} 
-                                    onChange={handleChange} 
-                                    placeholder="Phone Number (+234...)" 
-                                    className={`input-field ${fieldErrors.phone ? 'border-red-500 focus:ring-red-200' : ''}`} 
-                                />
+                                <input required type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="Phone Number (+234...)" className={`input-field ${fieldErrors.phone ? 'border-red-500 focus:ring-red-200' : ''}`} />
                                 {fieldErrors.phone && <p className="text-red-500 text-xs font-bold mt-1 ml-1 animate-pulse">{fieldErrors.phone}</p>}
                             </div>
                         </div>
@@ -363,11 +342,7 @@ return (
                             <div className="flex flex-col">
                                 <label className="text-xs font-bold text-gray-500 mb-1 uppercase ml-1">Date of Birth</label>
                                 <input required type="date" name="dob" value={formData.dob} onChange={handleChange} className="input-field" />
-                                {age !== null && (
-                                    <span className={`text-xs mt-1 font-bold ml-1 ${age < 18 ? 'text-red-500' : 'text-brand-primary'}`}>
-                                        Age: {age} {age < 18 && "(Must be 18+)"}
-                                    </span>
-                                )}
+                                {age !== null && <span className={`text-xs mt-1 font-bold ml-1 ${age < 18 ? 'text-red-500' : 'text-brand-primary'}`}>Age: {age} {age < 18 && "(Must be 18+)"}</span>}
                             </div>
                             <div className="flex flex-col">
                                 <label className="text-xs font-bold text-gray-500 mb-1 uppercase ml-1">Sex</label>
@@ -380,34 +355,20 @@ return (
                         </div>
                     </div>
                     
-
-    {/* --- STATE OF ORIGIN (NEW FIELD) --- */}
-    <div className="md:col-span-1">
-        <label htmlFor="stateOfOrigin" className="block text-sm font-medium text-gray-700 mb-1">STATE OF ORIGIN <span className="text-red-500">*</span></label>
-        <select
-            id="stateOfOrigin"
-            name="stateOfOrigin"
-            value={formData.stateOfOrigin}
-            // Assumes standard handleChange function is used
-            onChange={handleChange} 
-            required
-            className="input-field"
-        >
-            <option value="" disabled>Select State of Origin</option>
-            {/* Populates options using the keys (state names) from constants.ts */}
-            {Object.keys(STATE_LGAS).map(stateName => (
-                <option key={stateName} value={stateName}>
-                    {stateName}
-                </option>
-            ))}
-        </select>
-    </div>
+                    {/* State of Origin */}
+                    <div className="md:col-span-1">
+                        <label htmlFor="stateOfOrigin" className="block text-sm font-medium text-gray-700 mb-1">STATE OF ORIGIN <span className="text-red-500">*</span></label>
+                        <select id="stateOfOrigin" name="stateOfOrigin" value={formData.stateOfOrigin} onChange={handleChange} required className="input-field">
+                            <option value="" disabled>Select State of Origin</option>
+                            {Object.keys(STATE_LGAS).map(stateName => (
+                                <option key={stateName} value={stateName}>{stateName}</option>
+                            ))}
+                        </select>
+                    </div>
 
                     {/* Address */}
                     <div className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-                        <h3 className="text-lg font-bold text-brand-primary border-b-2 border-brand-primary/10 pb-2 mb-6 flex items-center gap-2 uppercase tracking-wider">
-                            Address
-                        </h3>
+                        <h3 className="text-lg font-bold text-brand-primary border-b-2 border-brand-primary/10 pb-2 mb-6 flex items-center gap-2 uppercase tracking-wider">Address</h3>
                         <div className="grid md:grid-cols-2 gap-5">
                             <select required name="state" value={formData.state} onChange={handleChange} className="input-field">
                                 <option value="">Select State Of Residence</option>
@@ -424,11 +385,9 @@ return (
 
                     {/* Documents */}
                     <div className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-                        <h3 className="text-lg font-bold text-brand-primary border-b-2 border-brand-primary/10 pb-2 mb-6 flex items-center gap-2 uppercase tracking-wider">
-                            Documents (Max 25KB)
-                        </h3>
+                        <h3 className="text-lg font-bold text-brand-primary border-b-2 border-brand-primary/10 pb-2 mb-6 flex items-center gap-2 uppercase tracking-wider">Documents (Max 25KB)</h3>
                         <div className="grid md:grid-cols-2 gap-6">
-                            {/* Passport Upload */}
+                            {/* Passport */}
                             <div className="flex flex-col">
                                 <div className={`relative border-2 border-dashed rounded-2xl p-2 h-64 flex flex-col items-center justify-center text-center transition-all group overflow-hidden ${fileErrors.passport ? 'border-red-300 bg-red-50' : (previews.passport ? 'border-brand-primary bg-brand-light/20' : 'border-gray-300 hover:border-brand-primary hover:bg-brand-light/10')}`}>
                                     {previews.passport ? (
@@ -452,7 +411,7 @@ return (
                                 {fileErrors.passport && <p className="text-red-500 text-xs font-bold mt-2 ml-1 text-center">{fileErrors.passport}</p>}
                             </div>
 
-                            {/* NIN Upload */}
+                            {/* NIN */}
                             <div className="flex flex-col">
                                 <div className={`relative border-2 border-dashed rounded-2xl p-2 h-64 flex flex-col items-center justify-center text-center transition-all group overflow-hidden ${fileErrors.nin ? 'border-red-300 bg-red-50' : (previews.nin ? 'border-brand-primary bg-brand-light/20' : 'border-gray-300 hover:border-brand-primary hover:bg-brand-light/10')}`}>
                                     {previews.nin ? (
@@ -480,9 +439,7 @@ return (
 
                     {/* Training Selection */}
                     <div className="animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-                        <h3 className="text-lg font-bold text-brand-primary border-b-2 border-brand-primary/10 pb-2 mb-6 flex items-center gap-2 uppercase tracking-wider">
-                            Training Selection
-                        </h3>
+                        <h3 className="text-lg font-bold text-brand-primary border-b-2 border-brand-primary/10 pb-2 mb-6 flex items-center gap-2 uppercase tracking-wider">Training Selection</h3>
                         <select required name="trainingArea" value={formData.trainingArea} onChange={handleChange} className="input-field w-full text-lg py-3">
                             <option value="">Select Area of Training</option>
                             <option>Plastic Recycling</option>
@@ -498,22 +455,91 @@ return (
                             <option>Upscaling & Upcycling</option>
                             <option>Solar Installation and Maintainance</option>
                             <option>Ecoprenuership</option>
-                            <option>Waste Exportation</option>
                             <option>Eco literacy </option>
                             <option>Afforestation & Reforestation</option>
                             <option>Waste Collection, Sorting, Segregation and Sales</option>
-                            <option>Waste Exportation</option>
-                           
                         </select>
                     </div>
 
-                    <button 
-                        type="submit" 
-                        disabled={status === 'submitting'}
-                        className="w-full bg-brand-primary text-white font-bold text-xl py-5 rounded-2xl shadow-lg hover:bg-brand-dark hover:shadow-brand-primary/30 hover:-translate-y-1 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-3 mt-8"
-                    >
-                        Submit Application
-                    </button>
+                    {/* --- ✅ NEW: EMAIL VERIFICATION & SUBMIT SECTION --- */}
+                    <div className="mt-8 p-6 bg-gray-50 border border-gray-200 rounded-2xl shadow-sm">
+                        <h3 className="text-lg font-bold text-brand-dark mb-4 flex items-center gap-2">
+                            <span className="bg-brand-primary text-white text-xs px-2 py-1 rounded">REQUIRED</span>
+                            Email Verification
+                        </h3>
+
+                        {/* Condition: Show Submit Button ONLY if Verified */}
+                        {isEmailVerified ? (
+                            <div className="animate-fade-in">
+                                <div className="bg-green-50 border border-green-200 p-4 rounded-xl flex items-center gap-3 mb-4">
+                                    <div className="h-10 w-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                        <Check className="text-green-600 w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-green-800 font-bold text-sm">Email Verified</h4>
+                                        <p className="text-green-700 text-xs">You can now submit your application.</p>
+                                    </div>
+                                </div>
+                                
+                                <button 
+                                    type="submit" 
+                                    disabled={status === 'submitting'}
+                                    className="w-full bg-brand-primary text-white font-bold text-xl py-5 rounded-2xl shadow-lg hover:bg-brand-dark hover:shadow-brand-primary/30 hover:-translate-y-1 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                                >
+                                    Submit Application
+                                </button>
+                            </div>
+                        ) : (
+                            /* Verification Form */
+                            <div className="space-y-4">
+                                <p className="text-sm text-gray-600">
+                                    We need to verify your email <span className="font-bold text-brand-dark">{formData.email || '...'}</span> before you can submit.
+                                </p>
+
+                                {otpError && (
+                                    <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2 animate-pulse">
+                                        <XCircle size={16} /> {otpError}
+                                    </div>
+                                )}
+
+                                {!otpSent ? (
+                                    <button
+                                        onClick={handleSendOtp}
+                                        disabled={verifying || !formData.email}
+                                        type="button" 
+                                        className="w-full py-3 bg-brand-dark text-white rounded-xl font-bold hover:bg-black transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {verifying ? <Loader2 className="animate-spin" /> : 'Send Verification Code'}
+                                    </button>
+                                ) : (
+                                    <div className="animate-fade-in-up">
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Enter 6-Digit Code</label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                maxLength={6}
+                                                value={otpCode}
+                                                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                                                className="flex-1 p-3 border border-gray-300 rounded-xl text-center tracking-[0.5em] font-bold text-lg focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 outline-none transition-all"
+                                                placeholder="000000"
+                                            />
+                                            <button
+                                                onClick={handleVerifyOtp}
+                                                disabled={verifying || otpCode.length < 6}
+                                                type="button"
+                                                className="px-6 py-3 bg-brand-primary text-white rounded-xl font-bold hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center shadow-md"
+                                            >
+                                                {verifying ? <Loader2 className="animate-spin" /> : 'Verify'}
+                                            </button>
+                                        </div>
+                                        <button onClick={() => setOtpSent(false)} type="button" className="text-xs text-gray-500 mt-3 hover:text-brand-primary underline">
+                                            Wrong email? Resend Code
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </form>
             </div>
 
@@ -549,12 +575,12 @@ return (
                 .input-field {
                     width: 100%;
                     padding: 0.9rem 1.25rem;
-                    background-color: #ffffff; /* Pure white for clarity */
+                    background-color: #ffffff;
                     border: 2px solid #e5e7eb;
                     border-radius: 0.75rem;
                     outline: none;
                     transition: all 0.3s;
-                    color: #111827; /* Dark text */
+                    color: #111827;
                     font-weight: 500;
                 }
                 .input-field:focus {
