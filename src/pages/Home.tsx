@@ -1,11 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-// ✅ CORRECTION 1: Added Loader2 to imports
-import { ArrowRight, Recycle, Wind, Zap, Hammer, Sprout, Globe, Trash2, Factory, BarChart3, Users, Map, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
-import { STATE_LGAS, getHeroBg, getAboutBg, getSlideImage, getLeaderImage, getPartnerImage, getTeamActivityImage,getPartnerUrl } from '../constants';
+// Icons: Cleaned up to include only the necessary 13 icons
+import { ArrowRight, Recycle, Zap, Hammer, BarChart3, Users, Map, ChevronRight, ChevronLeft, Loader2, Cpu, Leaf } from 'lucide-react';
+import { STATE_LGAS, getHeroBg, getAboutBg, getSlideImage, getLeaderImage, getPartnerImage, getTeamActivityImage, getPartnerUrl } from '../constants';
 import { db } from '../services/firebase';
-// 🚀 FIXED: Added modular Firestore imports
-import { doc, getDoc } from 'firebase/firestore'; 
+import { doc, onSnapshot } from 'firebase/firestore'; 
 
 // --- SCROLL ANIMATION HELPER ---
 const Reveal: React.FC<{ 
@@ -42,6 +41,71 @@ const Reveal: React.FC<{
     );
 };
 
+// --- FLIP CARD COMPONENT ---
+const TrainingFlipCard: React.FC<{
+    group: { title: string; icon: React.ReactNode; items: string[] };
+    delay: string;
+}> = ({ group, delay }) => {
+    const [isFlipped, setIsFlipped] = useState(false);
+
+    // Auto-flip back after 6 seconds
+    useEffect(() => {
+        let timer: number; 
+        if (isFlipped) {
+            timer = setTimeout(() => {
+                setIsFlipped(false);
+            }, 6000); 
+        }
+        return () => clearTimeout(timer); 
+    }, [isFlipped]);
+
+    return (
+        <Reveal animation="animate-fade-in-up" delay={delay} className="h-full">
+            <div 
+                className="group h-[320px] w-full [perspective:1000px] cursor-pointer"
+                onClick={() => setIsFlipped(!isFlipped)}
+            >
+                <div 
+                    className={`relative h-full w-full transition-all duration-700 [transform-style:preserve-3d] shadow-xl rounded-xl ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}
+                >
+                    {/* FRONT FACE */}
+                    <div className="absolute inset-0 h-full w-full [backface-visibility:hidden] bg-brand-primary border-2 border-brand-primary rounded-xl flex flex-col items-center justify-center p-6 text-center text-white">
+                        <div className="mb-4 p-4 rounded-full bg-white/20 text-white group-hover:bg-brand-light group-hover:text-brand-primary transition-colors duration-300">
+                            {group.icon}
+                        </div>
+                        <h3 className="text-xl font-bold mb-2">{group.title}</h3>
+                        <p className="text-xs text-green-100 mt-2 opacity-80 animate-pulse">
+                            Tap to view courses
+                        </p>
+                    </div>
+
+                    {/* BACK FACE */}
+                    <div className="absolute inset-0 h-full w-full [backface-visibility:hidden] [transform:rotateY(180deg)] bg-white border-4 border-brand-primary rounded-xl flex flex-col items-center justify-center p-6 text-center">
+                        <h4 className="text-brand-primary font-extrabold text-sm uppercase tracking-[0.2em] mb-4 border-b-2 border-brand-primary/10 pb-2 w-full">
+                            Courses
+                        </h4>
+                        
+                        <ul className="text-gray-700 text-sm space-y-2 overflow-y-auto custom-scrollbar w-full px-2 flex-1 flex flex-col justify-center">
+                            {group.items.map((item, idx) => (
+                                <li key={idx} className="flex items-start justify-center gap-2">
+                                    <span className="text-brand-primary">•</span> {item}
+                                </li>
+                            ))}
+                        </ul>
+                        
+                        {/* Timer Indicator */}
+                        <div className="mt-2 w-full flex justify-center items-center gap-2">
+                             <div className="h-1 bg-gray-100 rounded-full w-1/3 overflow-hidden">
+                                {isFlipped && <div className="h-full bg-brand-primary animate-[width_6s_linear_forwards]" style={{width: '100%'}}></div>}
+                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </Reveal>
+    );
+};
+
 interface StateStat {
     state: string;
     count: number;
@@ -72,12 +136,10 @@ const Home: React.FC = () => {
     const aboutSlides = [
         {
             image: getSlideImage(1),
-            // title: "Commitment to Sustainable Development Goals (SDGs)",
             alt: "SDG Goals"
         },
         {
             image: getSlideImage(2),
-            // title: "Our Purpose & Objectives",
             alt: "Purpose and Objectives"
         }
     ];
@@ -90,111 +152,125 @@ const Home: React.FC = () => {
         return () => clearInterval(interval);
     }, [aboutSlides.length]);
 
-    // FETCH STATS (Live Data or Fallback)
+    // FETCH STATS (Live Data using Real-Time Listener)
     useEffect(() => {
-        const fetchStats = async () => {
-            try {
-                // 1. Attempt to fetch REAL aggregated data from Firestore
-                // 🚀 FIXED: Using V9/V10 modular syntax (doc and getDoc)
-                const statsDocRef = doc(db, 'live_stats', 'registration_counts');
-                const docSnap = await getDoc(statsDocRef);
+        setLoadingStats(true); 
 
-               if (docSnap.exists()) { // 🚀 FIXED: V9/V10 uses exists() as a method
-    const data = docSnap.data();
-    
-    // CHANGE: The real total is in 'total' field
-    const realTotal = data?.total || 0; 
-    
-    // CHANGE: The state data is an array named 'state_counts', not a map
-    const stateCountsArray = data?.state_counts || []; 
+        const statsDocRef = doc(db, 'live_stats', 'registration_counts');
+        let initialLoadCompleted = false;
 
-    // Process the array directly (it should already be sorted/ready)
-    const sortedStats = stateCountsArray.map((item: any) => ({
-        state: item.state, // e.g., "Kano"
-        count: Number(item.count), // e.g., 1014
-        percentage: realTotal > 0 ? ((Number(item.count) / realTotal) * 100).toFixed(1) : '0'
-    }));
-    
-    setTotalRegistrations(realTotal);
-    setStats(sortedStats);
-} 
-else {
-                    // 2. FALLBACK: Simulation Mode (If real data doc doesn't exist yet)
-                    console.log("No live stats found. Using simulation mode.");
-                    
-                    const stateNames = Object.keys(STATE_LGAS);
-                    const stateMap: Record<string, number> = {};
-                    let total = 0;
+        const unsubscribe = onSnapshot(statsDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                const realTotal = data?.total || 0; 
+                const stateCountsArray = data?.state_counts || []; 
 
-                    stateNames.forEach(state => {
-                        const isHub = ['Lagos', 'FCT', 'Kano', 'Rivers', 'Oyo', 'Kaduna', 'Port Harcourt'].includes(state);
-                        const baseRandom = Math.floor(Math.random() * 780) + 120; 
-                        const multiplier = isHub ? (Math.random() * 5) + 3 : 1;
-                        const count = Math.floor(baseRandom * multiplier);
-                        stateMap[state] = count;
-                        total += count;
-                    });
+                const sortedStats = stateCountsArray.map((item: any) => ({
+                    state: item.state, 
+                    count: Number(item.count), 
+                    percentage: realTotal > 0 ? ((Number(item.count) / realTotal) * 100).toFixed(1) : '0'
+                }));
+                
+                setTotalRegistrations(realTotal);
+                setStats(sortedStats);
 
-                    setTotalRegistrations(total);
+            } else {
+                // FALLBACK: Simulation Mode
+                console.log("No live stats found. Using simulation mode.");
+                
+                const stateNames = Object.keys(STATE_LGAS);
+                const stateMap: Record<string, number> = {};
+                let total = 0;
 
-                    const sortedStats = Object.entries(stateMap)
-                        .map(([state, count]) => ({
-                            state,
-                            count,
-                            percentage: total > 0 ? ((count / total) * 100).toFixed(1) : '0'
-                        }))
-                        .sort((a, b) => b.count - a.count);
+                stateNames.forEach(state => {
+                    const isHub = ['Lagos', 'FCT', 'Kano', 'Rivers', 'Oyo', 'Kaduna', 'Port Harcourt'].includes(state);
+                    const baseRandom = Math.floor(Math.random() * 780) + 120; 
+                    const multiplier = isHub ? (Math.random() * 5) + 3 : 1;
+                    const count = Math.floor(baseRandom * multiplier);
+                    stateMap[state] = count;
+                    total += count;
+                });
 
-                    setStats(sortedStats);
-                }
-            } catch (error) {
-                console.error("Error fetching stats:", error);
-                setStats([]);
-                setTotalRegistrations(0);
-            } finally {
-                setLoadingStats(false);
+                setTotalRegistrations(total);
+
+                const sortedStats = Object.entries(stateMap)
+                    .map(([state, count]) => ({
+                        state,
+                        count,
+                        percentage: total > 0 ? ((count / total) * 100).toFixed(1) : '0'
+                    }))
+                    .sort((a, b) => b.count - a.count);
+
+                setStats(sortedStats);
             }
-        };
+            
+            if (!initialLoadCompleted) {
+                setLoadingStats(false);
+                initialLoadCompleted = true;
+            }
 
-        fetchStats();
+        }, (error) => {
+            console.error("Error fetching stats via onSnapshot:", error);
+            if (!initialLoadCompleted) {
+                setLoadingStats(false);
+                initialLoadCompleted = true;
+            }
+        });
+
+        return () => unsubscribe();
     }, []);
 
-    // ✅ CORRECTION 2: Helper function to display stat value or loading indicator
-    // Home.tsx (around line 161)
+    const renderStatValue = (value: number | undefined) => {
+        if (loadingStats) {
+            return (
+                <span className="flex items-center justify-center text-brand-light">
+                    <Loader2 className="w-8 h-8 animate-spin" />
+                </span>
+            );
+        }
+        return value !== undefined ? value.toLocaleString() : '0';
+    };
 
-const renderStatValue = (value: number | undefined) => {
-    if (loadingStats) {
-        return (
-            // 🚀 FIX: Changed <div> to <span> to resolve the HTML nesting error
-            <span className="flex items-center justify-center text-brand-light">
-                <Loader2 className="w-8 h-8 animate-spin" />
-            </span>
-        );
-    }
-    return value !== undefined ? value.toLocaleString() : '0';
-};
-
-    // Auto-scroll Effect for Gallery
+    // Auto-scroll Effect for Gallery - Seamless looping and correct stepping.
     useEffect(() => {
         const scrollContainer = scrollRef.current;
         if (!scrollContainer) return;
 
-        const autoScroll = setInterval(() => {
-            if (scrollContainer.scrollLeft + scrollContainer.clientWidth >= scrollContainer.scrollWidth - 10) {
-                // Reset to start if at the end
-                scrollContainer.scrollTo({ left: 0, behavior: 'smooth' });
-            } else {
-                scrollContainer.scrollBy({ left: 350, behavior: 'smooth' });
-            }
-        }, 4000); // Scroll every 4 seconds
+        // Calculated step size: md:min-w-[400px] + gap-6 (24px) = 424px
+        const ITEM_WIDTH_PLUS_GAP = 424; 
+        const ORIGINAL_COUNT = 7; 
+        
+        // The point at which the duplicated items start 
+        const transitionPoint = ORIGINAL_COUNT * ITEM_WIDTH_PLUS_GAP; 
 
-        return () => clearInterval(autoScroll);
+        const autoScroll = setInterval(() => {
+            // 1. Check if the container has scrolled past the original content boundary (into the duplicates).
+            if (scrollContainer.scrollLeft >= transitionPoint) {
+                // Instant reset to the start of the original content boundary.
+                scrollContainer.scrollTo({ 
+                    left: 0, 
+                    behavior: 'auto' 
+                });
+            }
+            
+            // 2. Perform the smooth scroll for the next item
+            scrollContainer.scrollBy({ 
+                left: ITEM_WIDTH_PLUS_GAP, 
+                behavior: 'smooth' 
+            });
+
+        }, 4000); 
+
+        // Clear the interval. Using 'as number' to fix the NodeJS.Timeout issue.
+        return () => clearInterval(autoScroll as number);
     }, []);
 
+    // Updated manual scroll amount to match item step size
     const scroll = (direction: 'left' | 'right') => {
         if (scrollRef.current) {
             const { current } = scrollRef;
-            const scrollAmount = 300;
+            const scrollAmount = 424; 
+            
             if (direction === 'left') {
                 current.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
             } else {
@@ -203,15 +279,38 @@ const renderStatValue = (value: number | undefined) => {
         }
     };
     
-    const trainingAreas = [
-        { title: "Plastic Recycling", icon: <Recycle className="w-6 h-6" />, desc: "Turn waste plastic into usable products." },
-        { title: "Wind Turbines", icon: <Wind className="w-6 h-6" />, desc: "Sustainable energy generation skills." },
-        { title: "Glass Recycling", icon: <Trash2 className="w-6 h-6" />, desc: "Processing glass for reuse." },
-        { title: "E-Waste Recycling", icon: <Zap className="w-6 h-6" />, desc: "Safe disposal and recovery." },
-        { title: "Feeds & Fertilizers", icon: <Sprout className="w-6 h-6" />, desc: "Waste valorization for agriculture." },
-        { title: "Textiles Recycling", icon: <Factory className="w-6 h-6" />, desc: "Repurposing fabric waste." },
-        { title: "Waste Exportation", icon: <Globe className="w-6 h-6" />, desc: "International standards for trade." },
-        { title: "Metal & Scraps", icon: <Hammer className="w-6 h-6" />, desc: "Foundry and metal recovery." },
+    // TRAINING GROUPS DATA STRUCTURE
+    const trainingGroups = [
+        { 
+            title: "Waste Recycling", 
+            icon: <Recycle className="w-8 h-8" />, 
+            items: ["Plastic", "Paper", "Wood", "Metal & Scraps", "Glass Recycling"] 
+        },
+        { 
+            title: "Upscaling & Upcycling", 
+            icon: <Hammer className="w-8 h-8" />, 
+            items: ["Textiles & Craft"] 
+        },
+        { 
+            title: "Energy & Community Renewable Solution", 
+            icon: <Zap className="w-8 h-8" />, 
+            items: ["Solar Energy", "Biodegradable Energy", "Wind Turbines", "Waste to Fertilizers & Feed", "Solar Stoves", "Electric Vehicles & Tricycles"] 
+        },
+        { 
+            title: "Ecopreneurship", 
+            icon: <BarChart3 className="w-8 h-8" />, 
+            items: ["Capacity Building", "Financial Literacy", "Waste Exportation", "Eco Literacy", "Product Trading", "Reuse & Repair"] 
+        },
+        { 
+            title: "Bio Mass", 
+            icon: <Leaf className="w-8 h-8" />, 
+            items: ["Afforestation & Reforestation"] 
+        },
+        { 
+            title: "Electronic Waste", 
+            icon: <Cpu className="w-8 h-8" />, 
+            items: ["Recycling of Electronics (TV, Phones, etc)", "Repair & Reuse"] 
+        },
     ];
 
     const leaders = [
@@ -220,16 +319,17 @@ const renderStatValue = (value: number | undefined) => {
         { name: "DR.MARYAM ISMAILA KESHINRO", role: "Permanent Secretary", quote: "Every recycled item is a naira earned and a step towards wealth creation." }
     ];
 
+    const carouselImages = [1, 2, 3, 4, 5, 6, 7, 1, 2, 3];
+
     return (
         <div className="flex flex-col font-sans">
             
-            {/* HERO SECTION - Eager Loaded (No lazy loading for Hero) */}
-            <section className="relative min-h-[600px] md:h-screen flex flex-col justify-start pt-32 md:justify-center items-center text-center px-4 overflow-hidden group">
+            {/* HERO SECTION */}
+            <section className="relative min-h-[600px]  -mt-20 md:h-screen flex flex-col justify-start pt-32 md:justify-center items-center text-center px-4 overflow-hidden group">
                 <div className="absolute inset-0 z-0">
                     <img 
                         src={getHeroBg()} 
                         alt="Circular Economy Background" 
-                        // Importance: High for LCP (Largest Contentful Paint)
                         fetchPriority="high"
                         className="w-full h-full object-cover object-center scale-105 animate-slow-zoom"
                     />
@@ -262,7 +362,7 @@ const renderStatValue = (value: number | undefined) => {
                     <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-fade-in-up" style={{ animationDelay: '1.2s' }}>
                         <Link 
                             to="/register" 
-                            className="mb-6 w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-gradient-to-r from-brand-primary to-green-600 text-white border-0 hover:from-white hover:to-gray-100 hover:text-brand-primary px-8 py-4 rounded-full text-lg font-bold shadow-lg hover:shadow-green-400/50 transition-all duration-300 transform hover:-translate-y-1"
+                            className="mb-11 w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-gradient-to-r from-brand-primary to-green-600 text-white border-0 hover:from-white hover:to-gray-100 hover:text-brand-primary px-8 py-4 rounded-full text-lg font-bold shadow-lg hover:shadow-green-400/50 transition-all duration-300 transform hover:-translate-y-1"
                         >
                             Register Now
                             <ArrowRight size={20} />
@@ -271,8 +371,8 @@ const renderStatValue = (value: number | undefined) => {
                 </div>
             </section>
 
-            {/* ABOUT SECTION - Lazy Load Images */}
-            <section id="about" className="py-12 md:py-20 relative overflow-hidden bg-white">
+            {/* ABOUT SECTION */}
+            <section id="about" className=" py-12 md:py-20 relative overflow-hidden bg-white">
                 <div className="absolute inset-0 z-0">
                     <img 
                         src={getAboutBg()} 
@@ -321,20 +421,10 @@ const renderStatValue = (value: number | undefined) => {
                                             <img 
                                                 src={slide.image} 
                                                 alt={slide.alt} 
-                                                loading="lazy"
+                                                loading="lazy" 
                                                 className="w-full h-full object-contain"
                                             />
-                                            {/* Gradient Overlay for text readability, only at bottom */}
                                             <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-brand-dark/90 to-transparent"></div>
-                                            
-                                            {/* Text Content - Positioned at bottom to not cover image center */}
-                                            {/* <div className="absolute bottom-0 left-0 right-0 p-6">
-                                                <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-xl">
-                                                    <p className="font-bold text-white text-lg md:text-xl border-l-4 border-brand-primary pl-4">
-                                                        {slide.title}
-                                                    </p>
-                                                </div>
-                                            </div> */}
                                         </div>
                                     ))}
                                 </div>
@@ -378,7 +468,6 @@ const renderStatValue = (value: number | undefined) => {
                                             </div>
                                             <h3 className="text-lg font-medium text-green-100">Total Registered</h3>
                                         </div>
-                                        {/* ✅ CORRECTION 3: Use the helper function for loading state */}
                                         <p className="text-5xl font-extrabold text-white tracking-tight">
                                             {renderStatValue(totalRegistrations)}
                                         </p>
@@ -391,7 +480,6 @@ const renderStatValue = (value: number | undefined) => {
                                             </div>
                                             <h3 className="text-lg font-medium text-green-100">Active States including FCT</h3>
                                         </div>
-                                        {/* ✅ CORRECTION 3: Use the helper function for loading state */}
                                         <p className="text-4xl font-bold text-white">
                                             {renderStatValue(stats.length)}
                                         </p>
@@ -443,7 +531,7 @@ const renderStatValue = (value: number | undefined) => {
                 </div>
             </section>
 
-            {/* TRAINING AREAS */}
+            {/* TRAINING AREAS (Updated with FLIP Cards) */}
             <section className="py-12 md:py-20 relative bg-white overflow-hidden">
                 {/* Pattern Background */}
                 <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#0C8829 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
@@ -454,28 +542,19 @@ const renderStatValue = (value: number | undefined) => {
                             <h2 className="text-3xl md:text-4xl font-bold text-brand-dark mb-4">Areas of Training</h2>
                             <div className="h-1 w-24 bg-brand-primary mx-auto rounded-full mb-6"></div>
                             <p className="text-gray-600 text-lg">
-                                Specialized, hands-on training in various sectors of the circular economy.
+                                Specialized, hands-on training grouped into key sectors of the circular economy.
                             </p>
                         </div>
                     </Reveal>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
-                        {trainingAreas.map((area, idx) => (
-                            <Reveal key={idx} animation="animate-fade-in-up" delay={`${idx * 0.1}s`}>
-                                <div 
-                                    className="group bg-brand-primary border-2 border-brand-primary p-4 md:p-6 rounded-xl shadow-lg hover:bg-white transition-all duration-300 flex flex-col items-center text-center h-full cursor-default"
-                                >
-                                    <div className="mb-3 p-3 rounded-full bg-white/20 text-white group-hover:bg-brand-light group-hover:text-brand-primary transition-colors duration-300">
-                                        {area.icon}
-                                    </div>
-                                    <h3 className="text-sm md:text-lg font-bold text-white mb-2 group-hover:text-brand-dark transition-colors">
-                                        {area.title}
-                                    </h3>
-                                    <p className="text-xs text-green-100 group-hover:text-gray-600 transition-colors hidden md:block">
-                                        {area.desc}
-                                    </p>
-                                </div>
-                            </Reveal>
+                    {/* New Grid for Groups */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+                        {trainingGroups.map((group, idx) => (
+                            <TrainingFlipCard 
+                                key={idx} 
+                                group={group} 
+                                delay={`${idx * 0.1}s`} 
+                            />
                         ))}
                     </div>
                     
@@ -515,20 +594,15 @@ const renderStatValue = (value: number | undefined) => {
                     {/* Carousel */}
                     <Reveal animation="animate-fade-in-right" delay="0.2s">
                         <div ref={scrollRef} className="flex overflow-x-auto snap-x snap-mandatory gap-6 pb-8 -mx-4 px-4 md:mx-0 md:px-0 no-scrollbar">
-                            {[1, 2, 3, 4, 5, 6, 7, 1, 2].map((num, idx) => (
-                                <div key={idx} className="min-w-[300px] md:min-w-[400px] snap-center">
+                            {carouselImages.map((num, idx) => (
+                                <div key={idx} className="min-w-[300px] md:min-w-[400px] snap-start"> 
                                     <div className="relative rounded-2xl overflow-hidden shadow-lg group h-[250px] md:h-[300px] border-4 border-white hover:border-brand-light transition-colors">
                                         <img 
                                             src={getTeamActivityImage(num)} 
                                             alt={`Activity ${idx}`} 
-                                            loading="lazy"
+                                            loading="lazy" 
                                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" 
                                         />
-                                        {/* <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80 group-hover:opacity-100 transition-opacity"></div>
-                                        <div className="absolute bottom-4 left-4 right-4 transform translate-y-2 group-hover:translate-y-0 transition-transform">
-                                            <span className="bg-brand-primary text-white text-[10px] font-bold px-2 py-1 rounded uppercase mb-2 inline-block shadow-sm">Highlights</span>
-                                            <h4 className="text-white font-bold text-lg drop-shadow-md">Youth Engagement</h4>
-                                        </div> */}
                                     </div>
                                 </div>
                             ))}
@@ -547,12 +621,12 @@ const renderStatValue = (value: number | undefined) => {
                     <div className="grid md:grid-cols-3 gap-8">
                         {leaders.map((leader, idx) => (
                             <Reveal key={idx} animation="animate-fade-in-up" delay={`${idx * 0.2}s`}>
-                                <div className="bg-white/5 backdrop-blur-md rounded-2xl overflow-hidden border border-green-500/30 hover:border-green-500/60 transition-all duration-300 group shadow-xl">
+                                <div className="bg-white/5 backdrop-blur-md rounded-2xl overflow-hidden border border-green-500/30 hover:border-border-green-500/60 transition-all duration-300 group shadow-xl">
                                     <div className="w-full aspect-[3/4] relative overflow-hidden">
                                         <img 
                                             src={getLeaderImage(leader.name)} 
                                             alt={leader.name} 
-                                            loading="lazy"
+                                            loading="lazy" 
                                             className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700" 
                                         />
                                         <div className="absolute inset-0 bg-gradient-to-t from-brand-dark/90 via-brand-dark/20 to-transparent opacity-80"></div>
@@ -576,12 +650,10 @@ const renderStatValue = (value: number | undefined) => {
     <div className="container mx-auto px-4 text-center">
         <Reveal animation="animate-fade-in">
             <div>
-                {/* 1. Changed text to "OUR PARTNERS" and adjusted margin to mb-4 */}
                 <p className="text-gray-800 font-extrabold uppercase tracking-widest text-sm mb-4 border-b-2 border-brand-primary inline-block pb-2">
                     OUR PARTNERS
                 </p>
                 
-                {/* 2. Added the mission statement */}
                 <p className="text-gray-600 max-w-3xl mx-auto mb-12">
                     We are on a mission to protect support, empower, and protect Nigerian youths while preserving and protecting the Ecosystem. We invite organizations that share our vision to join us in creating a brighter future for the next generation
                 </p>
@@ -595,17 +667,14 @@ const renderStatValue = (value: number | undefined) => {
                             <img 
                                 src={getPartnerImage(i)} 
                                 alt={`Partner ${i}`} 
-                                loading="lazy"
-                                // Added group-hover:scale-105 for the "raise up" effect
-                                className="h-32 w-32 md:h-40 md:w-40 object-contain filter transition-all duration-300 group-hover:scale-105 transition-transform" 
+                                loading="lazy" 
+                                className="h-32 w-32 md:h-40 md:w-40 object-contain filter transition-all duration-300 group-hover:scale-105" 
                             />
                         );
 
-                        // Base class for wrapper, including 'group' to enable group-hover utility
                         const baseClass = "md:w-auto flex justify-center items-center p-4 group";
 
                         return url ? (
-                            // RENDER <a> TAG (Clickable - uses shadow-xl on hover)
                             <a 
                                 key={i} 
                                 href={url}
@@ -616,7 +685,6 @@ const renderStatValue = (value: number | undefined) => {
                                 {imageElement}
                             </a>
                         ) : (
-                            // RENDER <div> TAG (Static - uses shadow-lg on hover for visual feedback)
                             <div 
                                 key={i} 
                                 className={baseClass + " hover:shadow-lg rounded-lg"}
@@ -637,6 +705,10 @@ const renderStatValue = (value: number | undefined) => {
                 }
                 .animate-slow-zoom {
                     animation: slow-zoom 20s linear infinite alternate;
+                }
+                @keyframes width {
+                    from { width: 100%; }
+                    to { width: 0%; }
                 }
                 .custom-scrollbar::-webkit-scrollbar {
                     width: 6px;

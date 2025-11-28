@@ -7,8 +7,10 @@ import { Loader2 } from 'lucide-react';
 // Lazy Load Pages to save bandwidth on initial load
 const Home = lazy(() => import('./pages/Home'));
 const Register = lazy(() => import('./pages/Register'));
-// ✅ 1. ADD THIS LINE: Lazy load the new Admin Login page
+// Lazy load the Admin Login page
 const AdminLogin = lazy(() => import('./pages/AdminLogin'));
+// Lazy load the new Admin Dashboard page
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard')); 
 
 // Component to force scroll to top on route change
 const ScrollToTop = () => {
@@ -40,14 +42,17 @@ const App = () => {
       <ScrollToTop />
       <div className="flex flex-col min-h-screen bg-[#f8fdf8] font-sans text-gray-800">
         <Navbar />
-        <main className="flex-grow">
+        <main className="flex-grow pt-20">
           <Suspense fallback={<LoadingFallback />}>
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/register" element={<Register />} />
               
-              {/* ✅ 2. ADD THIS LINE: The hidden "Secret" Route */}
-              <Route path="/secret-admin-login" element={<AdminLogin />} />
+              {/* 🛑 NEW URL: Admin Login Route */}
+              <Route path="/secure-auth-2025-a5B8" element={<AdminLogin />} />
+              
+              {/* 🛑 NEW URL: Admin Dashboard Route */}
+              <Route path="/console-access-81cW-ctrl" element={<AdminDashboard />} />
               
             </Routes>
           </Suspense>

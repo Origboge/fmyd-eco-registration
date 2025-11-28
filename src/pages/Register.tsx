@@ -495,6 +495,15 @@ return (
                             <option>Metal Recycling</option>
                             <option>Scrap Recycling</option>
                             <option>Energy & Community Solutions</option>
+                            <option>Upscaling & Upcycling</option>
+                            <option>Solar Installation and Maintainance</option>
+                            <option>Ecoprenuership</option>
+                            <option>Waste Exportation</option>
+                            <option>Eco literacy </option>
+                            <option>Afforestation & Reforestation</option>
+                            <option>Waste Collection, Sorting, Segregation and Sales</option>
+                            <option>Waste Exportation</option>
+                           
                         </select>
                     </div>
 
