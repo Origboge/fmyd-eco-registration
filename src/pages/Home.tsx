@@ -341,12 +341,15 @@ const Home: React.FC = () => {
                         Federal Ministry of Youth Development
                     </h4>
                     
-                    <h1 className="text-3xl md:text-6xl font-extrabold mb-8 leading-tight drop-shadow-xl text-white">
+                   <h1 className="text-3xl md:text-6xl font-extrabold mb-8 leading-tight drop-shadow-xl text-white">
                         Circular Economy <br/>
                         <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#FFD700] via-[#32CD32] to-[#00FFFF]">
                             Youth Empowerment
                         </span> <br/>
-                        <span className="text-white">Initiative</span>
+                        <span className="text-white">Initiative For </span>
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#FFD700] via-[#32CD32] to-[#00FFFF]">
+                            Climate Change
+                        </span>
                     </h1>
                     
                     <div className="h-1 w-32 bg-gradient-to-r from-[#FFD700] to-[#32CD32] mx-auto rounded-full mb-8 shadow-[0_0_20px_rgba(20,255,100,0.5)]"></div>

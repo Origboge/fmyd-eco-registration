@@ -11,7 +11,7 @@ import { Loader2, LogOut, FileText, BarChart3, X, ExternalLink, User } from 'luc
 
 // --- CONFIGURATION ---
 const ADMIN_SESSION_TIMEOUT_MINUTES = 30;
-// 🛑 Admin Login Route - Make sure this matches your App.tsx route!
+// 🔒 Admin Login Route - Make sure this matches your App.tsx route!
 const LOGIN_ROUTE = '/secure-auth-2025-a5B8'; 
 
 // --- TYPE DEFINITION (UPDATED TO INCLUDE ALL FIELDS) ---
@@ -21,7 +21,7 @@ interface RegistrationRecord {
     lastName: string;
     email: string;
     phone: string;
-    // 🛑 ALL NEW FIELDS DEFINED
+    // 📍 ALL NEW FIELDS DEFINED
     dob: string;
     sex: string;
     stateOfOrigin: string;
@@ -107,7 +107,7 @@ const AdminDashboard: React.FC = () => {
                     lastName: data.lastName || 'N/A',
                     email: data.email || 'N/A',
                     phone: data.phone || 'N/A',
-                    // 🛑 NEW FIELDS MAPPED FROM FIRESTORE
+                    // 📍 NEW FIELDS MAPPED FROM FIRESTORE
                     dob: data.dob || 'N/A',
                     sex: data.sex || 'N/A',
                     stateOfOrigin: data.stateOfOrigin || 'N/A',
@@ -142,8 +142,11 @@ const AdminDashboard: React.FC = () => {
             }
 
             try {
-                const idTokenResult = await user.getIdTokenResult(false); 
+                // Force refresh token to get latest claims
+                const idTokenResult = await user.getIdTokenResult(true); 
                 
+            
+
                 if (idTokenResult.claims.role === 'admin') {
                     if (isMounted) {
                         setIsAuthenticated(true);
@@ -154,7 +157,8 @@ const AdminDashboard: React.FC = () => {
                 } else {
                     if (isMounted) {
                         // User is logged in but not admin: sign out
-                        console.warn("Access Denied: Admin role missing. Signing out.");
+                        console.warn("🚨 ACCESS DENIED: Missing 'admin' role on account.");
+                        alert("Access Denied: You do not have administrator privileges.");
                         await auth.signOut();
                         handleLogout(); 
                     }
@@ -309,7 +313,6 @@ const AdminDashboard: React.FC = () => {
                                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                                         <button 
                                             onClick={() => handleViewDetails(record)}
-                                            // 🛑 FIX: Removed conflicting 'hover:text-brand-dark'
                                             className="text-brand-primary font-medium inline-flex items-center gap-1 border border-brand-primary/30 px-3 py-1 rounded-lg hover:bg-brand-primary hover:text-white transition-all"
                                         >
                                             <FileText size={16}/> View Details
@@ -352,7 +355,7 @@ const AdminDashboard: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-8">
                                 <h5 className="col-span-full text-lg font-bold text-gray-700 mt-2 mb-2">Personal & Location</h5>
                                 
-                                {/* 🛑 NEW FIELDS RENDERED HERE */}
+                                {/* 📍 NEW FIELDS RENDERED HERE */}
                                 <DetailItem label="Date of Birth" value={selectedUser.dob} />
                                 <DetailItem label="Sex" value={selectedUser.sex} />
                                 <DetailItem label="State of Origin" value={selectedUser.stateOfOrigin} />
