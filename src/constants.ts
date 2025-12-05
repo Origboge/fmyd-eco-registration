@@ -107,9 +107,11 @@ export const getPartnerImage = (index: number) => {
         "images/partner-1.webp", // Index 1 maps to this (Array index 0)
         "images/partner-3.webp",
         "images/doltma.webp", // Index 2 maps to this
+        "images/partner-6.webp",
         "images/partner-2.webp",
         "images/partner-4.webp",
         "images/partner-5.webp",
+        
 
         
     ];

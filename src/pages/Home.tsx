@@ -663,7 +663,7 @@ const Home: React.FC = () => {
                 
                 <div className="flex flex-wrap justify-center gap-2 md:gap-4">
                     
-                    {[1, 2, 3, 4, 5, 6].map((i) => {
+                    {[1, 2, 3, 4, 5, 6, 7].map((i) => {
                         const url = getPartnerUrl(i);
                         
                         const imageElement = (
