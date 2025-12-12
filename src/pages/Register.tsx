@@ -4,9 +4,7 @@ import { useState, useEffect } from 'react';
 // ✅ MODULAR IMPORTS
 import { signInAnonymously } from 'firebase/auth'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; 
-// ✅ FUNCTIONS IMPORTS
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { collection, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore'; 
 
 import type { ChangeEvent } from 'react';
 import { STATE_LGAS } from '../constants';
@@ -14,7 +12,8 @@ import { auth, db, storage } from '../services/firebase';
 
 import type { RegistrationFormData } from '../types'
 // ✅ ICONS
-import { CheckCircle2, Upload, XCircle, Image as ImageIcon, Loader2, Check, X, AlertCircle } from 'lucide-react';
+import { CheckCircle2, Upload, XCircle, Image as ImageIcon, Loader2, AlertCircle, X, Lock } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const Register: React.FC = () => {
     const [formData, setFormData] = useState<RegistrationFormData>({
@@ -27,29 +26,41 @@ const Register: React.FC = () => {
     const [age, setAge] = useState<number | null>(null);
     const [lgas, setLgas] = useState<string[]>([]);
     
-    // Submission Status State
+    // Status States
     const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
     const [showTerms, setShowTerms] = useState(false);
-
-    // Visual State
-    const [previews, setPreviews] = useState<{passport?: string, nin?: string}>({});
     
-    // ✅ UNIFIED VALIDATION STATE (Replaces fieldErrors)
+    // 🔒 NEW: Registration Status (Open/Closed)
+    const [isRegistrationOpen, setIsRegistrationOpen] = useState<boolean | null>(null); // null = loading
+
+    // Visual & Validation State
+    const [previews, setPreviews] = useState<{passport?: string, nin?: string}>({});
     const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
-    // --- OTP STATE ---
-    const [otpSent, setOtpSent] = useState(false);
-    const [otpCode, setOtpCode] = useState('');
-    const [isEmailVerified, setIsEmailVerified] = useState(false);
-    const [verifying, setVerifying] = useState(false);
-    const [otpError, setOtpError] = useState('');
-    const [feedbackMsg, setFeedbackMsg] = useState(''); 
-
-    const functions = getFunctions();
-
-    // Scroll to top on mount
+    // Scroll to top on mount & Check Registration Status
     useEffect(() => {
         window.scrollTo(0, 0);
+        
+        const checkStatus = async () => {
+            try {
+                // We check a specific document in Firestore
+                const docRef = doc(db, 'settings', 'config');
+                const docSnap = await getDoc(docRef);
+                
+                if (docSnap.exists()) {
+                    // If field exists, use it. Default to TRUE if missing.
+                    const isOpen = docSnap.data().registrationOpen;
+                    setIsRegistrationOpen(isOpen !== undefined ? isOpen : true);
+                } else {
+                    // If config document doesn't exist yet, assume open
+                    setIsRegistrationOpen(true);
+                }
+            } catch (error) {
+                console.error("Error checking status:", error);
+                setIsRegistrationOpen(true); // Default to open on error
+            }
+        };
+        checkStatus();
     }, []);
 
     // Cleanup object URLs
@@ -60,11 +71,8 @@ const Register: React.FC = () => {
         };
     }, [previews]);
 
-    // --- ✅ LOGIC: SEND OTP ---
-    const handleSendOtp = async () => {
-        setOtpError('');
-        setFeedbackMsg('');
-        
+    // --- ✅ LOGIC: VALIDATE FORM (Replaces handleSendOtp) ---
+    const handleInitialValidation = () => {
         // 1. Identify all required fields
         const requiredFields: (keyof RegistrationFormData)[] = [
             'firstName', 'lastName', 'email', 'phone', 'dob', 'sex',
@@ -102,74 +110,34 @@ const Register: React.FC = () => {
         // 4. If Errors Exist -> STOP & SHOW THEM
         if (Object.keys(newErrors).length > 0) {
             setValidationErrors(newErrors);
-            setOtpError("Please fill in all highlighted fields.");
             window.scrollTo({ top: 100, behavior: 'smooth' });
             return;
         }
 
         setValidationErrors({}); // Clear errors
-
-        // 5. Send OTP
-        setVerifying(true);
-        try {
-            const sendOtpFn = httpsCallable(functions, 'sendRegistrationOtp');
-            await sendOtpFn({ email: formData.email, name: formData.firstName }); 
-            setOtpSent(true);
-            setFeedbackMsg(`Code sent to ${formData.email}. Please enter it below.`);
-        } catch (error: any) {
-            console.error("OTP Error:", error);
-            setOtpError(error.message || 'Failed to send code. Check internet or email.');
-        } finally {
-            setVerifying(false);
-        }
-    };
-
-    // --- ✅ LOGIC: VERIFY OTP ---
-    const handleVerifyOtp = async () => {
-        if (otpCode.length < 6) return;
-        setVerifying(true);
-        setOtpError('');
-        try {
-            const verifyOtpFn = httpsCallable(functions, 'verifyRegistrationOtp');
-            await verifyOtpFn({ email: formData.email, code: otpCode });
-            setIsEmailVerified(true);
-            setVerifying(false); 
-            setShowTerms(true);
-        } catch (error: any) {
-            console.error("Verification Error:", error);
-            setOtpError('Invalid code or expired. Please try again.');
-            setVerifying(false); 
-        }
+        
+        // 5. If Valid -> Show Terms Modal
+        setShowTerms(true);
     };
 
     // --- HANDLERS ---
     
-    // ✅ FIXED: Updated to use setValidationErrors instead of missing setFieldErrors
     const handleEmailBlur = () => {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (formData.email && !emailRegex.test(formData.email)) {
              setValidationErrors(prev => ({ ...prev, email: "Please enter a valid email address." }));
         } else {
-             // Clear specific email error if valid
              setValidationErrors(prev => {
                 const newErrors = { ...prev };
                 delete newErrors.email;
                 return newErrors;
              });
         }
-        
-        // Reset verification if email changes
-        if (isEmailVerified) {
-            setIsEmailVerified(false);
-            setOtpSent(false);
-            setOtpCode('');
-        }
     };
 
     const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         
-        // Clear error for this field as soon as they type
         if (validationErrors[name]) {
             setValidationErrors(prev => ({ ...prev, [name]: '' }));
         }
@@ -181,10 +149,8 @@ const Register: React.FC = () => {
         }
 
         if (name === 'phone') {
-             // ✅ FIXED: Updated to use setValidationErrors
              if (!/^[0-9+\-\s]*$/.test(value)) {
                 setValidationErrors(prev => ({ ...prev, phone: "Only numbers are allowed." }));
-                // Auto-clear after 2 seconds
                 setTimeout(() => {
                     setValidationErrors(prev => {
                         const newErrors = { ...prev };
@@ -194,7 +160,6 @@ const Register: React.FC = () => {
                 }, 2000);
                 return; 
              } else {
-                // Clear phone error immediately if valid input
                 if (validationErrors.phone) {
                     setValidationErrors(prev => {
                         const newErrors = { ...prev };
@@ -286,19 +251,48 @@ const Register: React.FC = () => {
                 dob: '', sex: '', stateOfOrigin: '', state: '', lga: '', address: '', landmark: '', trainingArea: ''
             });
             setPreviews({});
-            setIsEmailVerified(false);
-            setOtpSent(false);
-            setOtpCode('');
 
         } catch (err: any) {
             console.error(err);
             setStatus('error');
-            setVerifying(false); 
         }
     };
 
-    // --- RENDER ---
+    // --- HELPER FOR INPUT CLASSES ---
+    const getInputClass = (fieldName: string) => `input-field ${validationErrors[fieldName] ? 'border-red-500 bg-red-50 focus:ring-red-200' : ''}`;
 
+    // --- RENDER STATES ---
+
+    // 1. Loading Config
+    if (isRegistrationOpen === null) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                <Loader2 className="w-10 h-10 text-brand-primary animate-spin" />
+            </div>
+        );
+    }
+
+    // 2. CLOSED STATE (Registration Locked)
+    if (isRegistrationOpen === false) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+                <div className="bg-white p-10 rounded-3xl shadow-xl text-center max-w-md w-full border border-gray-200">
+                    <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Lock className="w-10 h-10 text-gray-500" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-800 mb-2">Registration Closed</h2>
+                    <p className="text-gray-600 mb-8">
+                        The application portal is currently closed. Please check back later or follow our official channels for updates.
+                    </p>
+                    <Link to="/" className="inline-block bg-brand-primary text-white px-8 py-3 rounded-xl font-bold hover:bg-brand-dark transition-colors">
+                        Back to Home
+                    </Link>
+                </div>
+            </div>
+        );
+    }
+
+    // 3. SUCCESS STATE
     if (status === 'success') {
         return (
             <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-gradient-to-b from-white to-brand-light/30 p-4 overflow-y-auto">
@@ -307,7 +301,7 @@ const Register: React.FC = () => {
                     <div className="w-24 h-24 bg-brand-light rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
                         <CheckCircle2 className="w-14 h-14 text-brand-primary" />
                     </div>
-                    <h2 className="text-3xl font-extrabold text-brand-dark mb-2">Registration Successful!</h2>
+                    <h2 className="text-3xl font-extrabold text-brand-dark mb-2">Application Submitted!</h2>
                     <p className="text-gray-600 mb-8 font-medium">Thank you for joining the Circular Economy Youth Empowerment Initiative.</p>
                     <button onClick={() => setStatus('idle')} className="bg-brand-primary text-white px-10 py-3 rounded-full font-bold hover:bg-brand-dark transition-all shadow-lg hover:shadow-xl hover:-translate-y-1">
                         Welldone
@@ -317,9 +311,7 @@ const Register: React.FC = () => {
         );
     }
 
-    // Helper class for inputs with errors
-    const getInputClass = (fieldName: string) => `input-field ${validationErrors[fieldName] ? 'border-red-500 bg-red-50 focus:ring-red-200' : ''}`;
-
+    // 4. MAIN FORM
     return (
         <div className="bg-gradient-to-b from-white via-brand-light/40 to-brand-primary/5 min-h-screen py-24 px-4 relative">
             
@@ -327,9 +319,6 @@ const Register: React.FC = () => {
                 <div className="fixed inset-0 z-[100] bg-white/90 backdrop-blur-md flex flex-col items-center justify-center overflow-y-auto">
                     <div className="relative">
                         <div className="w-24 h-24 border-4 border-gray-200 border-t-brand-primary rounded-full animate-spin"></div>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-16 h-16 bg-white rounded-full"></div>
-                        </div>
                     </div>
                     <p className="mt-6 text-xl font-bold text-brand-primary animate-pulse">Submitting Application...</p>
                     <p className="text-gray-500 text-sm mt-2">Please do not close this page.</p>
@@ -339,12 +328,11 @@ const Register: React.FC = () => {
             {status === 'error' && (
                 <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in-up overflow-y-auto">
                     <div className="bg-white p-10 rounded-[2rem] shadow-2xl text-center max-w-md w-full border border-red-100 relative overflow-hidden">
-                        <div className="absolute top-0 left-0 w-full h-2 bg-red-500"></div>
                         <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
                             <XCircle className="w-14 h-14 text-red-500" />
                         </div>
                         <h2 className="text-3xl font-extrabold text-red-600 mb-2">Registration Failed</h2>
-                        <p className="text-gray-600 mb-8 font-medium">We couldn't submit your application. Please check your internet connection and try again.</p>
+                        <p className="text-gray-600 mb-8 font-medium">We couldn't submit your application. Please check your internet connection.</p>
                         <div className="flex justify-center gap-4">
                             <button onClick={() => setStatus('idle')} className="px-8 py-3 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-colors">Close</button>
                             <button onClick={handleFinalSubmit} className="bg-red-500 text-white px-8 py-3 rounded-full font-bold hover:bg-red-700 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1">Try Again</button>
@@ -382,7 +370,6 @@ const Register: React.FC = () => {
                         </div>
                         <div className="grid md:grid-cols-2 gap-5 mt-5">
                             <div>
-                                {/* ✅ FIXED: Added onBlur={handleEmailBlur} */}
                                 <input required type="email" name="email" value={formData.email} onChange={handleChange} onBlur={handleEmailBlur} placeholder="Email Address" className={getInputClass('email')} />
                                 {validationErrors.email && <p className="text-red-500 text-xs mt-1 ml-1 font-medium flex items-center gap-1"><AlertCircle size={10} /> {validationErrors.email}</p>}
                             </div>
@@ -530,73 +517,19 @@ const Register: React.FC = () => {
                         {validationErrors.trainingArea && <p className="text-red-500 text-xs mt-1 ml-1 font-medium flex items-center gap-1"><AlertCircle size={10} /> {validationErrors.trainingArea}</p>}
                     </div>
 
-                    {/* --- ✅ EMAIL VERIFICATION SECTION --- */}
-                    <div className="mt-8 p-6 bg-gray-50 border border-gray-200 rounded-2xl shadow-sm">
-                        <h3 className="text-lg font-bold text-brand-dark mb-4 flex items-center gap-2">
-                            <span className="bg-brand-primary text-white text-xs px-2 py-1 rounded">REQUIRED</span>
-                            Email Verification
-                        </h3>
-
-                        {/* 1. MESSAGE AREA */}
-                        {feedbackMsg && (
-                            <div className="bg-green-100 border border-green-300 text-green-800 px-4 py-3 rounded-xl mb-4 text-sm font-bold text-center animate-fade-in-down shadow-sm flex items-center justify-center gap-2">
-                                <Check size={16} /> {feedbackMsg}
-                            </div>
-                        )}
-
-                        {/* 2. ERROR AREA */}
-                        {otpError && (
-                            <div className="bg-red-50 text-red-600 p-3 mb-4 rounded-lg text-sm flex items-center gap-2 animate-pulse border border-red-100">
-                                <XCircle size={16} /> {otpError}
-                            </div>
-                        )}
-
-                        {/* 3. INPUTS & BUTTONS */}
-                        {!otpSent ? (
-                            <div className="space-y-3">
-                                <p className="text-sm text-gray-600">
-                                    We need to verify your email <span className="font-bold text-brand-dark">{formData.email || '...'}</span> before you can submit.
-                                </p>
-                                <button
-                                    onClick={handleSendOtp}
-                                    disabled={verifying}
-                                    type="button"
-                                    className="w-full py-3 bg-brand-dark text-white rounded-xl font-bold hover:bg-black transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {verifying ? <Loader2 className="animate-spin" /> : 'Send Verification Code'}
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="animate-fade-in-up">
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Enter 6-Digit Code</label>
-                                
-                                <div className="flex flex-col sm:flex-row gap-3">
-                                    <input
-                                        type="text"
-                                        maxLength={6}
-                                        value={otpCode}
-                                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                                        className="w-full sm:flex-1 p-3 border border-gray-300 rounded-xl text-center tracking-[0.5em] font-bold text-lg focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 outline-none transition-all"
-                                        placeholder="000000"
-                                    />
-                                    <button
-                                        onClick={handleVerifyOtp}
-                                        disabled={verifying || otpCode.length < 6}
-                                        type="button"
-                                        className="w-full sm:w-auto px-6 py-3 bg-brand-primary text-white rounded-xl font-bold hover:bg-green-600 disabled:opacity-50 flex items-center justify-center shadow-md whitespace-nowrap"
-                                    >
-                                        {verifying ? <Loader2 className="animate-spin" /> : 'Verify'}
-                                    </button>
-                                </div>
-
-                                <p className="text-[10px] text-gray-400 mt-3 text-center">
-                                    Click "Verify" to proceed to Terms & Conditions.
-                                </p>
-                                <button onClick={() => setOtpSent(false)} type="button" className="text-xs text-gray-500 mt-2 hover:text-brand-primary underline w-full text-center">
-                                    Wrong email? Resend Code
-                                </button>
-                            </div>
-                        )}
+                    {/* --- ✅ SUBMIT BUTTON (NO OTP) --- */}
+                    <div className="mt-8 pt-6 border-t border-gray-100">
+                        <button
+                            onClick={handleInitialValidation}
+                            disabled={status === 'submitting'}
+                            type="button"
+                            className="w-full bg-brand-primary text-white font-bold text-xl py-5 rounded-2xl shadow-lg hover:bg-brand-dark hover:shadow-brand-primary/30 hover:-translate-y-1 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                        >
+                            {status === 'submitting' ? <Loader2 className="animate-spin" /> : 'Review & Submit Application'}
+                        </button>
+                        <p className="text-center text-xs text-gray-400 mt-4">
+                            By clicking Submit, you agree to our Terms & Data Policy.
+                        </p>
                     </div>
                 </form>
             </div>

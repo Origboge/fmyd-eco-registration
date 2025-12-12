@@ -348,7 +348,7 @@ const Home: React.FC = () => {
                         </span> <br/>
                         <span className="text-white">Initiative For </span>
                         <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#FFD700] via-[#32CD32] to-[#00FFFF]">
-                            Climate Change
+                            Climate Action
                         </span>
                     </h1>
                     
