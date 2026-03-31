@@ -462,7 +462,7 @@ const Home: React.FC = () => {
                                         <BarChart3 className="text-brand-light" /> 
                                         Live Impact Tracker
                                     </h2>
-                                    <p className="text-green-100/80 mb-8">Data updates weekly.</p>
+                                    {/* <p className="text-green-100/80 mb-8">Data updates weekly.</p> */}
                                     
                                     <div className="bg-white/5 backdrop-blur-sm border border-white/10 p-6 rounded-2xl hover:bg-white/10 transition-colors mb-4">
                                         <div className="flex items-center gap-4 mb-2">

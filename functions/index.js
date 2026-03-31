@@ -12,14 +12,16 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 const storage = admin.storage();
 
-// --- 1. EXISTING: LIVE STATS FUNCTION ---
+// --- 1. UPDATED: LIVE STATS FUNCTION (Manual Mode) ---
 
 const TABLE_ID = 'fmyd-circular-eco-registration.registration_data.users_raw_latest';
 
 /**
- * Executes a BigQuery query weekly, processes results, and writes to Firestore.
+ * NOW MANUAL ONLY: No weekly schedule.
+ * Trigger this manually via the Google Cloud Console "Test" button
+ * or by visiting its URL if needed.
  */
-exports.updateLiveStats = functions.region('us-central1').pubsub.schedule('0 9 * * 1').onRun(async(context) => {
+exports.updateLiveStats = functions.region('us-central1').https.onRequest(async(req, res) => {
     const bigquery = new BigQuery();
 
     const query = `
@@ -55,11 +57,13 @@ exports.updateLiveStats = functions.region('us-central1').pubsub.schedule('0 9 *
         await db.collection('live_stats').doc('registration_counts').set(statsData);
 
         console.log('Live stats updated successfully in Firestore!');
-        return { status: "Success", totalCount };
+
+        // IMPORTANT: HTTP functions must end with a response, not just 'return'
+        res.status(200).json({ status: "Success", totalCount });
 
     } catch (error) {
         console.error("BigQuery or Firestore Update Failed:", error);
-        return { status: "Error", message: error.message };
+        res.status(500).json({ status: "Error", message: error.message });
     }
 });
 
